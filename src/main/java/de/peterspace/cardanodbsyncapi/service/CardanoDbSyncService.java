@@ -11,8 +11,10 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import de.peterspace.cardanodbsyncapi.dto.EpochStake;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
@@ -43,32 +45,6 @@ public class CardanoDbSyncService {
 		jdbcTemplate.execute("CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
 		log.info("Indexes created");
-	}
-
-	public StakeInfo getStakeInfo(String addr) {
-		try {
-			return jdbcTemplate.queryForObject("""
-					select
-						(select sum(value) from utxo_view utxo where utxo.stake_address_id=txo.stake_address_id) stake
-						,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
-						,(select ticker_name from pool_offline_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
-						,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
-					from tx_out txo
-					join delegation d on d.addr_id=txo.stake_address_id
-					join stake_address sa on sa.id=txo.stake_address_id
-					where txo.address=?
-					order by d.slot_no desc
-					limit 1
-					""",
-					(rs, rowNum) -> new StakeInfo(
-							rs.getLong("stake"),
-							rs.getString("pool_hash"),
-							rs.getString("ticker_name"),
-							rs.getLong("total_stake")),
-					addr);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
 	}
 
 	public List<Utxo> getUtxos(String addr) {
@@ -138,26 +114,32 @@ public class CardanoDbSyncService {
 				addr, addr);
 	}
 
-	public ReturnAddress getReturnAddress(String addr) {
-		// if address has no stake part, just return it
-		if (StringUtils.length(addr) == 58) {
-			return new ReturnAddress(addr);
-		}
+	public ReturnAddress getReturnAddress(String stakeAddress) {
 		try {
 			return jdbcTemplate.queryForObject("""
-					select txo_stake.address, txo_stake.id
-					from tx_out txo
-					join tx_out txo_stake on txo_stake.stake_address_id=txo.stake_address_id
-					where txo.address=?
-					union
-					select txo_stake.address, txo_stake.id
+					select txo.address
 					from stake_address sa
-					join tx_out txo_stake on txo_stake.stake_address_id=sa.id
+					join tx_out txo on txo.stake_address_id=sa.id
 					where sa."view"=?
-					order by id
+					order by txo.id
 					limit 1
 					""",
-					(rs, rowNum) -> new ReturnAddress(rs.getString("address")), addr, addr);
+					(rs, rowNum) -> new ReturnAddress(rs.getString("address")), stakeAddress);
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
+	public StakeAddress getStakeAddress(String address) {
+		try {
+			return jdbcTemplate.queryForObject("""
+					select sa."view" stakeAddress from
+					tx_out txo
+					join stake_address sa on sa.id=txo.stake_address_id
+					where txo.address=?
+					limit 1
+					""",
+					(rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")), address);
 		} catch (EmptyResultDataAccessException e) {
 			return null;
 		}
@@ -262,6 +244,31 @@ public class CardanoDbSyncService {
 		}
 	}
 
+	public StakeInfo getStakeInfo(String stakeAddress) {
+		try {
+			return jdbcTemplate.queryForObject("""
+					select
+						(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
+						,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
+						,(select ticker_name from pool_offline_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
+						,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
+					from delegation d
+					join stake_address sa on sa.id=d.addr_id
+					where sa."view"=?
+					order by d.id desc
+					limit 1
+					""",
+					(rs, rowNum) -> new StakeInfo(
+							rs.getLong("stake"),
+							rs.getString("pool_hash"),
+							rs.getString("ticker_name"),
+							rs.getLong("total_stake")),
+					stakeAddress);
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
 	public List<PoolInfo> getPoolList() {
 		return jdbcTemplate.query("""
 				select distinct pod.ticker_name, ph."view" pool_hash
@@ -272,6 +279,24 @@ public class CardanoDbSyncService {
 				(rs, rowNum) -> new PoolInfo(
 						rs.getString("ticker_name"),
 						rs.getString("pool_hash")));
+	}
+
+	public List<EpochStake> getEpochStake(String poolHash, int epoch) {
+		return jdbcTemplate.query("""
+				select
+					sa."view" stake_address,
+					es.amount
+				from pool_hash ph
+				join epoch_stake es on es.pool_id=ph.id
+				join stake_address sa on sa.id=es.addr_id
+				where
+				ph.view=?
+				and epoch_no=?
+				""",
+				(rs, rowNum) -> new EpochStake(
+						rs.getString("stake_address"),
+						rs.getLong("amount")),
+				poolHash, epoch);
 	}
 
 	private String toHexString(byte[] bytes) {
