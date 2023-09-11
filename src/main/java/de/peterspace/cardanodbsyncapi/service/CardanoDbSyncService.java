@@ -9,8 +9,10 @@ import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
+import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
@@ -298,6 +300,169 @@ public class CardanoDbSyncService {
 						rs.getLong("amount")),
 				poolHash, epoch);
 	}
+
+	public List<AccountStatementRow> getStatement(String address) {
+		if (StringUtils.length(address) == 59 && address.startsWith("stake")) {
+			return accountStatement(address);
+		} else {
+			return addressStatement(address);
+		}
+
+	}
+
+	private List<AccountStatementRow> addressStatement(String address) {
+		return jdbcTemplate.query("""
+				select
+					"time" "timestamp",
+					min("epoch_no") epoch,
+					min(encode(hash, 'hex')) tx_hash,
+					sum("WITHDRAWN") withdrawn,
+					sum("REWARDS") rewards,
+					sum("OUT") "OUT",
+					sum("IN") "IN",
+					(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
+					sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
+					string_agg(distinct "TYPE", ',') operations
+					from (
+							-- normal input
+							select
+								t2.id txId,
+								b2.time,
+								b2.epoch_no,
+								t2.hash,
+								'IN' "TYPE",
+								0 "OUT",
+								to2.value "IN",
+								0 "WITHDRAWN",
+								0 "REWARDS"
+							from tx_out to2
+							join tx t2 on t2.id=to2.tx_id
+							join block b2 on b2.id=t2.block_id
+							where to2.address = ?
+							union all
+							-- normal output
+							select
+								t2.id txId,
+								b2.time,
+								b2.epoch_no,
+								t2.hash,
+								'OUT' "TYPE",
+								to2.value "OUT",
+								0 "IN",
+								0 "WITHDRAWN",
+								0 "REWARDS"
+							from tx_in ti
+							join tx t2 on t2.id=ti.tx_in_id
+							join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+							join block b2 on b2.id=t2.block_id
+							where to2.address = ?
+				) movings
+				group by "timestamp", txId
+				order by "timestamp" desc, txId desc
+				""",
+				accountStatementRowMapper,
+				address, address);
+	}
+
+	private List<AccountStatementRow> accountStatement(String stakeAddress) {
+		return jdbcTemplate.query("""
+				select
+					"time" "timestamp",
+					min("epoch_no") epoch,
+					min(encode(hash, 'hex')) tx_hash,
+					sum("WITHDRAWN") withdrawn,
+					sum("REWARDS") rewards,
+					sum("OUT") "OUT",
+					sum("IN") "IN",
+					(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
+					sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
+					string_agg(distinct "TYPE", ',') operations
+					from (
+							-- normal input
+							select
+								t2.id txId,
+								b2.time,
+								b2.epoch_no,
+								t2.hash,
+								'IN' "TYPE",
+								0 "OUT",
+								to2.value "IN",
+								0 "WITHDRAWN",
+								0 "REWARDS"
+							from tx_out to2
+							join tx t2 on t2.id=to2.tx_id
+							join block b2 on b2.id=t2.block_id
+							join stake_address sa on sa.id=to2.stake_address_id
+							where sa."view" = ?
+							union all
+							-- normal output
+							select
+								t2.id txId,
+								b2.time,
+								b2.epoch_no,
+								t2.hash,
+								'OUT' "TYPE",
+								to2.value "OUT",
+								0 "IN",
+								0 "WITHDRAWN",
+								0 "REWARDS"
+							from tx_in ti
+							join tx t2 on t2.id=ti.tx_in_id
+							join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+							join block b2 on b2.id=t2.block_id
+							join stake_address sa on sa.id=to2.stake_address_id
+							where sa."view" = ?
+							union all
+							-- withdrawn
+							select
+								t2.id txId,
+								b2.time,
+								b2.epoch_no,
+								t2.hash,
+								'WITHDRAW' "TYPE",
+								0 "OUT",
+								0 "IN",
+								wi.amount "WITHDRAWN",
+								0 "REWARDS"
+							from withdrawal wi
+							join tx t2 on t2.id=wi.tx_id
+							join block b2 on b2.id=t2.block_id
+							join stake_address sa on sa.id=wi.addr_id
+							where sa."view" = ?
+							union all
+							-- generated reward
+							select
+								0 "txId",
+								TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091),
+								rw.earned_epoch epoch_no,
+								null hash,
+								'REWARD_'||rw."type" "TYPE",
+								0 "OUT",
+								0 "IN",
+								0 "WITHDRAWN",
+								rw.amount "REWARDS"
+							from reward rw
+							join stake_address sa on sa.id=rw.addr_id
+							where sa."view" = ?
+				) movings
+				group by "timestamp", txId
+				order by "timestamp" desc, txId desc
+				""",
+				accountStatementRowMapper,
+				stakeAddress, stakeAddress, stakeAddress, stakeAddress);
+	}
+
+	private RowMapper<AccountStatementRow> accountStatementRowMapper = (result, rowNum) -> new AccountStatementRow(
+			result.getTimestamp("timestamp"),
+			result.getInt("epoch"),
+			result.getString("tx_hash"),
+			result.getLong("withdrawn"),
+			result.getLong("rewards"),
+			result.getLong("OUT"),
+			result.getLong("IN"),
+			result.getLong("change"),
+			result.getLong("sum"),
+			result.getString("operations").split(","));
 
 	private String toHexString(byte[] bytes) {
 		return bytes == null ? null : Hex.encodeHexString(bytes);

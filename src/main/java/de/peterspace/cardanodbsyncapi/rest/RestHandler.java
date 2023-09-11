@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
@@ -68,7 +69,7 @@ public class RestHandler {
 
 	@Operation(summary = "getTokenDetails")
 	@GetMapping(value = "/token/{policyId}/{assetName}")
-	public TokenDetails getTokenList(
+	public TokenDetails getTokenDetails(
 			@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
 			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable String assetName) throws DecoderException {
 		return cardanoDbSyncService.getTokenDetails(policyId, assetName);
@@ -86,6 +87,13 @@ public class RestHandler {
 			@Parameter(example = "pool180fejev4xgwe2y53ky0pxvgxr3wcvkweu6feq5mdljfzcsmtg6u") @PathVariable String poolHash,
 			@Parameter(example = "432") @PathVariable int epoch) {
 		return cardanoDbSyncService.getEpochStake(poolHash, epoch);
+	}
+
+	@Operation(summary = "Get all transactions for an address or stakeAddress")
+	@GetMapping(value = "/{address}/statement")
+	public List<AccountStatementRow> getStatement(
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
+		return cardanoDbSyncService.getStatement(address);
 	}
 
 }
