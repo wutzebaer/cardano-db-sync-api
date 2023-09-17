@@ -1,6 +1,5 @@
 package de.peterspace.cardanodbsyncapi.service;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -153,12 +152,12 @@ public class CardanoDbSyncService {
 		List<Object> filterParams = new ArrayList<Object>();
 
 		if (afterMintid != null) {
-			filters.add("and mtm.id > ?");
+			filters.add("and ma_mint_id > ?");
 			filterParams.add(afterMintid);
 		}
 
 		if (beforeMintid != null) {
-			filters.add("and mtm.id < ?");
+			filters.add("and ma_mint_id < ?");
 			filterParams.add(beforeMintid);
 		}
 
@@ -166,35 +165,53 @@ public class CardanoDbSyncService {
 			filter = filter.trim();
 			String[] bits = filter.split("\\.");
 			if (bits.length == 2 && bits[0].length() == 56) {
-				filters.add("and ma.policy=? and ma.name=?");
+				filters.add("and ma_policy_id=? and ma_name=?");
 				filterParams.add(Hex.decodeHex(bits[0]));
-				filterParams.add(bits[1].getBytes(StandardCharsets.UTF_8));
+				filterParams.add(Hex.decodeHex(bits[1]));
 			} else if (bits.length == 1 && bits[0].length() == 56) {
-				filters.add("and ma.policy=?");
+				filters.add("and ma_policy_id=?");
 				filterParams.add(Hex.decodeHex(bits[0]));
 			} else if (bits[0].length() == 44 && bits[0].startsWith("asset")) {
-				filters.add("and ma.fingerprint=?");
+				filters.add("and ma_fingerprint=?");
 				filterParams.add(bits[0]);
+			} else {
+				return List.of();
 			}
 		}
 
 		return jdbcTemplate.query("""
 				select
-					mtm.id ma_mint_id
-					,b.slot_no
-					,ma."policy" ma_policy_id
-					,ma.name ma_name
-					,mtm.quantity
-				from ma_tx_mint mtm
-				join multi_asset ma on ma.id = mtm.ident
-				join tx on tx.id = mtm.tx_id
-				join block b on b.id = tx.block_id
-				left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+					ma_mint_id
+					,slot_no
+					,ma_policy_id
+					,ma_name
+					,ma_fingerprint
+					,quantity
+					,metadata->>'name' "name"
+					,case
+						WHEN jsonb_typeof(metadata->'image') = 'array'
+						then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
+				    	ELSE metadata->>'image'
+				  	END "image"
+				from (
+					select
+						mtm.id ma_mint_id
+						,b.slot_no
+						,ma."policy" ma_policy_id
+						,ma.name ma_name
+						,ma.fingerprint ma_fingerprint
+						,mtm.quantity
+						,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metaData
+					from ma_tx_mint mtm
+					join multi_asset ma on ma.id = mtm.ident
+					join tx on tx.id = mtm.tx_id
+					join block b on b.id = tx.block_id
+					left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+					) sub
 				where
-					coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) is not null
-					and mtm.quantity>0
+					metadata is not null
 					""" + StringUtils.join(filters, " ") + """
-				order by mtm.id desc
+				order by ma_mint_id desc
 				limit 100
 				""",
 				(rs, rowNum) -> new TokenListItem(
@@ -202,8 +219,73 @@ public class CardanoDbSyncService {
 						rs.getLong("slot_no"),
 						toHexString(rs.getBytes("ma_policy_id")),
 						toHexString(rs.getBytes("ma_name")),
-						rs.getLong("slot_no")),
+						rs.getString("ma_fingerprint"),
+						rs.getLong("quantity"),
+						rs.getString("name"),
+						rs.getString("image")),
 				filterParams.toArray());
+	}
+
+	public List<TokenListItem> getAddressTokenList(String addr) throws DecoderException {
+
+		String join;
+		String where;
+		if (StringUtils.length(addr) == 59 && addr.startsWith("stake")) {
+			join = "join stake_address sa on sa.id=uv.stake_address_id ";
+			where = "sa.\"view\"=? ";
+		} else {
+			join = "";
+			where = "uv.address=? ";
+		}
+
+		String query = String.format("""
+				select
+					ma_policy_id
+					,ma_name
+					,ma_fingerprint
+					,quantity
+					,metadata->>'name' "name"
+					,case
+						WHEN jsonb_typeof(metadata->'image') = 'array'
+						then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
+				    	ELSE metadata->>'image'
+				  	END "image"
+				from (
+						select
+							ma."policy" ma_policy_id
+							,ma.name ma_name
+							,max(ma.fingerprint) ma_fingerprint
+							,sum(mto.quantity) quantity
+							,(select
+								coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex'))
+								from ma_tx_mint mtm
+								join tx_metadata tm on tm.tx_id=mtm.tx_id and tm."key"=721
+								where mtm.ident=max(mto.ident) and mtm.quantity>0
+								order by tm.id desc limit 1) metaData
+						from utxo_view uv
+						%s
+						join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+						join ma_tx_out mto on mto.tx_out_id=txo.id
+						join multi_asset ma on ma.id=mto.ident
+						where
+							%s
+						group by ma."policy", ma.name
+						order by max(uv.id) desc
+						) sub
+				where
+					metadata is not null
+				""", join, where);
+		return jdbcTemplate.query(query,
+				(rs, rowNum) -> new TokenListItem(
+						null,
+						null,
+						toHexString(rs.getBytes("ma_policy_id")),
+						toHexString(rs.getBytes("ma_name")),
+						rs.getString("ma_fingerprint"),
+						rs.getLong("quantity"),
+						rs.getString("name"),
+						rs.getString("image")),
+				addr);
 	}
 
 	public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {

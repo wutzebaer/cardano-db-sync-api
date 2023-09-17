@@ -5,14 +5,18 @@ import lombok.Value;
 
 @Value
 public class TokenListItem {
-	@NotNull
-	long maMintId;
-	@NotNull
-	long slotNo;
+	Long maMintId;
+	Long slotNo;
 	@NotNull
 	String maPolicyId;
 	@NotNull
 	String maName;
 	@NotNull
+	String maFingerprint;
+	@NotNull
 	long quantity;
+	@NotNull
+	String name;
+	@NotNull
+	String image;
 }
