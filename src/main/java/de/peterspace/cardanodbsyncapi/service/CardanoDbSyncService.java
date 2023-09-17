@@ -320,7 +320,7 @@ public class CardanoDbSyncService {
 							rs.getString("fingerprint"),
 							rs.getString("metadata"),
 							rs.getString("ma_policy_script"),
-							rs.getString("tx_hash"),
+							toHexString(rs.getBytes("tx_hash")),
 							rs.getLong("total_supply")),
 					Hex.decodeHex(policyId), Hex.decodeHex(assetName));
 		} catch (EmptyResultDataAccessException e) {
