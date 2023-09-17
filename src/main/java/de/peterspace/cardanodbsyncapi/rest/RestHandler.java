@@ -77,7 +77,7 @@ public class RestHandler {
 	@GetMapping(value = "/{address}/token")
 	@Cacheable("getAddressTokenList")
 	public List<TokenListItem> getAddressTokenList(
-			@Parameter(example = SAMPLE_STAKE_ADDRESS) String address) throws DecoderException {
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) throws DecoderException {
 		return cardanoDbSyncService.getAddressTokenList(address);
 	}
 
