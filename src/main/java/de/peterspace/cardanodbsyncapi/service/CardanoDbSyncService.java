@@ -20,6 +20,8 @@ import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
+import de.peterspace.cardanodbsyncapi.utils.Utils;
+import de.peterspace.cardanodbsyncapi.utils.Utils.AddressType;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -117,6 +119,16 @@ public class CardanoDbSyncService {
 
 	public ReturnAddress getReturnAddress(String stakeAddress) {
 		try {
+			AddressType addressType = Utils.determineAddressType(stakeAddress);
+
+			if (addressType == AddressType.SERVICE_ADDRESS) {
+				return new ReturnAddress(stakeAddress);
+			}
+
+			if (addressType == AddressType.FULL_ADDRESS) {
+				stakeAddress = getStakeAddress(stakeAddress).getAddress();
+			}
+
 			return jdbcTemplate.queryForObject("""
 					select txo.address
 					from stake_address sa
