@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
+import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
@@ -81,6 +82,14 @@ public class RestHandler {
 		return cardanoDbSyncService.getAddressTokenList(address);
 	}
 
+	@Operation(summary = "Get all transactions for an address or stakeAddress")
+	@GetMapping(value = "/{address}/statement")
+	@Cacheable("getStatement")
+	public List<AccountStatementRow> getStatement(
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
+		return cardanoDbSyncService.getStatement(address);
+	}
+
 	@Operation(summary = "getTokenDetails")
 	@GetMapping(value = "/token/{policyId}/{assetName}")
 	@Cacheable("getTokenDetails")
@@ -106,12 +115,11 @@ public class RestHandler {
 		return cardanoDbSyncService.getEpochStake(poolHash, epoch);
 	}
 
-	@Operation(summary = "Get all transactions for an address or stakeAddress")
-	@GetMapping(value = "/{address}/statement")
-	@Cacheable("getStatement")
-	public List<AccountStatementRow> getStatement(
-			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
-		return cardanoDbSyncService.getStatement(address);
+	@Operation(summary = "Get all token owners of a policyId, values get updated twice a day")
+	@GetMapping(value = "/policy/{policyId}/owners")
+	@Cacheable("getOwners")
+	public List<OwnerInfo> getOwners(@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId) throws DecoderException {
+		return cardanoDbSyncService.getOwners(policyId);
 	}
 
 }

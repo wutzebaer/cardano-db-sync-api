@@ -1,18 +1,24 @@
 package de.peterspace.cardanodbsyncapi.service;
 
+import java.sql.Array;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import de.peterspace.cardanodbsyncapi.config.TrackExecutionTime;
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
+import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
@@ -47,7 +53,35 @@ public class CardanoDbSyncService {
 		log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
 		jdbcTemplate.execute("CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
+		// token owners
+		log.info("Creating materialized view ma_owners");
+		jdbcTemplate.execute("""
+				CREATE MATERIALIZED VIEW IF NOT exists ma_owners AS
+					select
+						coalesce(sa."view" , txo.address) address
+						,sum(mto.quantity) quantity
+						,ma."policy" "policy"
+						,array_agg(distinct encode(ma."name", 'hex'))  maNames
+					from multi_asset ma
+					join ma_tx_out mto on ma.id=mto.ident
+					join tx_out txo on txo.id=mto.tx_out_id
+					left join tx_in ti on ti.tx_out_id=txo.tx_id and ti.tx_out_index=txo."index"
+					left join stake_address sa on sa.id=txo.stake_address_id
+					where
+					ti.id is null
+					group by ma."policy", coalesce(sa."view" , txo.address);
+					""");
+		log.info("Creating index idx_ma_owners_policy");
+		jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
+
 		log.info("Indexes created");
+	}
+
+	@TrackExecutionTime
+	@Scheduled(cron = "0 0 0/12 * * *")
+	public void updateOwnerView() {
+		log.info("Refreshing ma_owners");
+		jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ma_owners;");
 	}
 
 	public List<Utxo> getUtxos(String addr) {
@@ -393,6 +427,26 @@ public class CardanoDbSyncService {
 						rs.getString("stake_address"),
 						rs.getLong("amount")),
 				poolHash, epoch);
+	}
+
+	public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
+		log.info("Running getOwners for policy {}", policyId);
+		return jdbcTemplate.query("""
+					select * from ma_owners mo where mo.policy=?
+				""",
+				(rs, rowNum) -> {
+					List<String> maNames = new ArrayList<>();
+					ResultSet maNamesRs = rs.getArray("maNames").getResultSet();
+					while (maNamesRs.next()) {
+						maNames.add(maNamesRs.getString(2));
+					}
+					OwnerInfo ownerInfo = new OwnerInfo(
+							rs.getString("address"),
+							rs.getLong("quantity"),
+							maNames);
+					return ownerInfo;
+				},
+				Hex.decodeHex(policyId));
 	}
 
 	public List<AccountStatementRow> getStatement(String address) {
