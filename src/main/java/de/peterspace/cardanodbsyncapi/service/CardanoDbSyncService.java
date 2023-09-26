@@ -191,6 +191,18 @@ public class CardanoDbSyncService {
 			return null;
 		}
 	}
+	
+	public StakeAddress getStakeAddressByHash(String stakeAddressHash) throws DataAccessException, DecoderException {
+		try {
+			return jdbcTemplate.queryForObject("""
+					select view stakeAddress from stake_address sa where sa.hash_raw=?;
+					""",
+					(rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")), Hex.decodeHex(stakeAddressHash));
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
 
 	public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter) throws DecoderException {
 

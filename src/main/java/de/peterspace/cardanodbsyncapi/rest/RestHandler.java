@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.commons.codec.DecoderException;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,6 +63,13 @@ public class RestHandler {
 	@Cacheable("getStakeAddress")
 	public StakeAddress getStakeAddress(@Parameter(example = SAMPLE_ADDRESS) @PathVariable String address) {
 		return cardanoDbSyncService.getStakeAddress(address);
+	}
+
+	@Operation(summary = "Find stakeAddress by stakeAddressHash")
+	@GetMapping(value = "/stakeAddress/{stakeAddressHash}")
+	@Cacheable("getStakeAddress")
+	public StakeAddress getStakeAddressByHash(@Parameter(example = "e1ddbe7a587e6bdd2674bf53fc093226bbd43af035f4ea07d781167966") @PathVariable String stakeAddressHash) throws DecoderException {
+		return cardanoDbSyncService.getStakeAddressByHash(stakeAddressHash);
 	}
 
 	@Operation(summary = "getTokenList")
