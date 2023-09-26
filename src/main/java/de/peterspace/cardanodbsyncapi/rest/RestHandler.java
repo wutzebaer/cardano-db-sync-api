@@ -67,7 +67,7 @@ public class RestHandler {
 
 	@Operation(summary = "Find stakeAddress by stakeAddressHash")
 	@GetMapping(value = "/stakeAddress/{stakeAddressHash}")
-	@Cacheable("getStakeAddress")
+	@Cacheable("getStakeAddressByHash")
 	public StakeAddress getStakeAddressByHash(@Parameter(example = "e1ddbe7a587e6bdd2674bf53fc093226bbd43af035f4ea07d781167966") @PathVariable String stakeAddressHash) throws DecoderException {
 		return cardanoDbSyncService.getStakeAddressByHash(stakeAddressHash);
 	}
