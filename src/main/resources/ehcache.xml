@@ -104,6 +104,14 @@
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
+	
+	<cache alias="getLastMint">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
 
 	<cache alias="getOwners">
 		<expiry>

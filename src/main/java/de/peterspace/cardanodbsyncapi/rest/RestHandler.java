@@ -4,9 +4,10 @@ import java.util.List;
 
 import org.apache.commons.codec.DecoderException;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.dao.DataAccessException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,6 +25,8 @@ import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -96,6 +99,24 @@ public class RestHandler {
 	public List<AccountStatementRow> getStatement(
 			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
 		return cardanoDbSyncService.getStatement(address);
+	}
+
+	public static record GetLastMintRequest(String stakeAddress, List<String> policyIds) {
+	}
+
+	@Operation(summary = "Get last minted tokens for stakeAddress and policy ids")
+	@PostMapping(value = "/lastMint")
+	@Cacheable("getLastMint")
+	public List<TokenDetails> getLastMint(
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = { @ExampleObject(value = """
+					{
+					  "stakeAddress": "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn",
+					  "policyIds": [
+					    "38e97ac082af9312c69c9e2b0949c0d7873f0bbca34b0a8905ec2441"
+					  ]
+					}
+					""") })) @RequestBody GetLastMintRequest getLastMintRequest) {
+		return cardanoDbSyncService.getLastMint(getLastMintRequest.stakeAddress, getLastMintRequest.policyIds);
 	}
 
 	@Operation(summary = "getTokenDetails")

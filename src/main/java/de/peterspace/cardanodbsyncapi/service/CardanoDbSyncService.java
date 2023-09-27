@@ -191,7 +191,7 @@ public class CardanoDbSyncService {
 			return null;
 		}
 	}
-	
+
 	public StakeAddress getStakeAddressByHash(String stakeAddressHash) throws DataAccessException, DecoderException {
 		try {
 			return jdbcTemplate.queryForObject("""
@@ -202,7 +202,6 @@ public class CardanoDbSyncService {
 			return null;
 		}
 	}
-
 
 	public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter) throws DecoderException {
 
@@ -442,7 +441,6 @@ public class CardanoDbSyncService {
 	}
 
 	public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
-		log.info("Running getOwners for policy {}", policyId);
 		return jdbcTemplate.query("""
 					select * from ma_owners mo where mo.policy=?
 				""",
@@ -459,6 +457,55 @@ public class CardanoDbSyncService {
 					return ownerInfo;
 				},
 				Hex.decodeHex(policyId));
+	}
+
+	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
+		return jdbcTemplate.query("""
+					with lastTransaction as (
+						select t2.hash
+						from ma_tx_mint mtm
+						join multi_asset ma ON ma.id=mtm.ident
+						join tx_out to2 on to2.tx_id=mtm.tx_id
+						join tx t2 on t2.id=mtm.tx_id
+						join stake_address sa on sa.id=to2.stake_address_id
+						where sa.view=? AND ma."policy"=ANY(?)
+						order by mtm.id desc
+						limit 1
+					)
+					select
+						b.slot_no
+						,ma."policy" ma_policy_id
+						,ma.name ma_name
+						,ma.fingerprint
+						,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
+						,script.json ma_policy_script
+						,tx.hash tx_hash
+						,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
+					from ma_tx_mint mtm
+					join multi_asset ma ON ma.id=mtm.ident
+					join tx on tx.id=mtm.tx_id
+					join block b on b.id = tx.block_id
+					left join tx_metadata tm on tm.tx_id = tx.id and tm."key"=721
+					join script on script.hash=ma."policy"
+					where tx.hash=(select hash from lastTransaction)
+					order by ma.id desc
+				""",
+				(rs, rowNum) -> new TokenDetails(
+						rs.getLong("slot_no"),
+						toHexString(rs.getBytes("ma_policy_id")),
+						toHexString(rs.getBytes("ma_name")),
+						rs.getString("fingerprint"),
+						rs.getString("metadata"),
+						rs.getString("ma_policy_script"),
+						toHexString(rs.getBytes("tx_hash")),
+						rs.getLong("total_supply")),
+				stakeAddress, policyIds.stream().map(policyId -> {
+					try {
+						return Hex.decodeHex(policyId);
+					} catch (DecoderException e) {
+						throw new RuntimeException(e);
+					}
+				}).toArray(byte[][]::new));
 	}
 
 	public List<AccountStatementRow> getStatement(String address) {
