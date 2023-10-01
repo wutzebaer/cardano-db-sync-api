@@ -108,6 +108,22 @@ public class RestHandler {
 		return cardanoDbSyncService.getStatement(address);
 	}
 
+	@Operation(summary = "Get all handles from a stakeAddress")
+	@GetMapping(value = "/{stakeAddress}/handles")
+	@Cacheable("getHandles")
+	public List<StakeAddress> getHandles(
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) throws DecoderException {
+		return cardanoDbSyncService.getHandles(stakeAddress);
+	}
+
+	@Operation(summary = "Get address for handle")
+	@GetMapping(value = "/handles/{handle}")
+	@Cacheable("getAddressByHandle")
+	public StakeAddress getAddressByHandle(
+			@Parameter(example = "petergrossmann") @PathVariable String handle) throws DecoderException {
+		return cardanoDbSyncService.getAddressByHandle(handle);
+	}
+
 	public static record GetLastMintRequest(String stakeAddress, List<String> policyIds) {
 	}
 

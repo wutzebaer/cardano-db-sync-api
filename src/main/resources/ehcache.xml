@@ -48,7 +48,7 @@
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
-	
+
 	<cache alias="getStakeAddressByHash">
 		<expiry>
 			<ttl unit="days">1</ttl>
@@ -56,7 +56,7 @@
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
-	
+
 	<cache alias="getStakeHashByAddress">
 		<expiry>
 			<ttl unit="days">1</ttl>
@@ -113,6 +113,22 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 	
+	<cache alias="getHandles">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+	
+	<cache alias="getAddressByHandle">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getLastMint">
 		<expiry>
 			<ttl unit="minutes">1</ttl>

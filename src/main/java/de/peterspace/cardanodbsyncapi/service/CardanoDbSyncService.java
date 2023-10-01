@@ -37,9 +37,12 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class CardanoDbSyncService {
 	private final JdbcTemplate jdbcTemplate;
+	private byte[] handlePolicyBytes;
 
 	@PostConstruct
-	public void init() {
+	public void init() throws DecoderException {
+		handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
+
 		// find mints of multi asset
 		log.info("Creating index idx_ma_tx_mint_ident");
 		jdbcTemplate.execute("CREATE index if not exists idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
@@ -471,6 +474,35 @@ public class CardanoDbSyncService {
 					return ownerInfo;
 				},
 				Hex.decodeHex(policyId));
+	}
+
+	public List<StakeAddress> getHandles(String stakeAddress) throws DecoderException {
+		return jdbcTemplate.query("""
+					select ma.name assetName
+					from stake_address sa
+					join utxo_view uv on uv.stake_address_id=sa.id
+					join tx_out to2 on to2.tx_id=uv.tx_id and to2."index"=uv."index"
+					join ma_tx_out mto on mto.tx_out_id=to2.id
+					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
+					where sa.view=?
+				""",
+				(rs, rowNum) -> new StakeAddress(new String(rs.getBytes("assetName"))),
+				handlePolicyBytes, stakeAddress);
+	}
+
+	public StakeAddress getAddressByHandle(String handle) throws DecoderException {
+		try {
+			return jdbcTemplate.queryForObject("""
+					select address from ma_owners mo
+					where
+					mo."policy"=?
+					and ?=ANY(mo.manames)
+					""",
+					(rs, rowNum) -> new StakeAddress(rs.getString("address")),
+					handlePolicyBytes, Hex.encodeHexString(handle.getBytes()));
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
 	}
 
 	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
