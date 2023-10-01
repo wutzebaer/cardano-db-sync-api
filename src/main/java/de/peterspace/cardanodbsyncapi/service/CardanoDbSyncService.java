@@ -505,6 +505,13 @@ public class CardanoDbSyncService {
 		}
 	}
 
+	public Boolean isTransactionConfirmed(String txId) throws DataAccessException, DecoderException {
+		return jdbcTemplate.queryForObject("""
+				select count(*) from tx where hash=?
+				""",
+				(rs, rowNum) -> rs.getBoolean(1), Hex.decodeHex(txId));
+	}
+
 	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
 		return jdbcTemplate.query("""
 					with lastTransaction as (
@@ -560,7 +567,6 @@ public class CardanoDbSyncService {
 		} else {
 			return addressStatement(address);
 		}
-
 	}
 
 	private List<AccountStatementRow> addressStatement(String address) {

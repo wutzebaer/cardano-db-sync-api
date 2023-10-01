@@ -3,7 +3,9 @@ package de.peterspace.cardanodbsyncapi.rest;
 import java.util.List;
 
 import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -172,6 +174,13 @@ public class RestHandler {
 	@Cacheable("getOwners")
 	public List<OwnerInfo> getOwners(@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId) throws DecoderException {
 		return cardanoDbSyncService.getOwners(policyId);
+	}
+
+	@Operation(summary = "Checks is a txid has been included in the chain")
+	@GetMapping(value = "/transaction/{txId}/confirmed")
+	@Cacheable("isTransactionConfirmed")
+	public Boolean isTransactionConfirmed(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+		return cardanoDbSyncService.isTransactionConfirmed(txId);
 	}
 
 }

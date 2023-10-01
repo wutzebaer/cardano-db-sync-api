@@ -112,7 +112,7 @@
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
-	
+
 	<cache alias="getHandles">
 		<expiry>
 			<ttl unit="minutes">1</ttl>
@@ -120,7 +120,7 @@
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
-	
+
 	<cache alias="getAddressByHandle">
 		<expiry>
 			<ttl unit="minutes">1</ttl>
@@ -140,6 +140,14 @@
 	<cache alias="getOwners">
 		<expiry>
 			<ttl unit="hours">1</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
+	<cache alias="isTransactionConfirmed">
+		<expiry>
+			<ttl unit="seconds">10</ttl>
 		</expiry>
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
