@@ -14,5 +14,7 @@ public class Utxo {
 	@NotNull
 	long value;
 	@NotNull
+	String owningAddress;
+	@NotNull
 	String sourceAddress;
 }

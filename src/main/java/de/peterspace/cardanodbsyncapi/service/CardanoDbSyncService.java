@@ -86,9 +86,11 @@ public class CardanoDbSyncService {
 
 	public List<Utxo> getUtxos(String addr) {
 
+		AddressType addressType = Utils.determineAddressType(addr);
+
 		String join;
 		String where;
-		if (StringUtils.length(addr) == 59 && addr.startsWith("stake")) {
+		if (addressType == AddressType.STAKE_ADDRESS) {
 			join = "join stake_address sa on sa.id=uv.stake_address_id ";
 			where = "sa.\"view\"=? ";
 		} else {
@@ -98,16 +100,16 @@ public class CardanoDbSyncService {
 
 		String query = String.format("""
 				select
-					encode(tx.hash::bytea, 'hex') tx_hash,
+					tx.hash tx_hash,
 					uv."index" tx_index,
 					null ma_policy_id,
 					null ma_name,
 					uv.value,
+					uv.address owning_address,
 					(
-						select coalesce(sa."view", txo.address)
+						select txo.address
 						from tx_in ti
 						join tx_out txo on txo.tx_id = ti.tx_out_id and txo."index" = ti.tx_out_index
-						left join stake_address sa on sa.id=txo.stake_address_id
 						where ti.tx_in_id = uv.tx_id
 						limit 1
 					) source_address
@@ -118,19 +120,19 @@ public class CardanoDbSyncService {
 					%s
 				union
 				select
-					encode(tx.hash::bytea, 'hex'),
+					tx.hash,
 					uv."index",
 					ma."policy",
 					ma."name",
 					mto.quantity,
+					uv.address owning_address,
 					(
-						select coalesce(sa."view", txo.address)
+						select txo.address
 						from tx_in ti
 						join tx_out txo on txo.tx_id = ti.tx_out_id and txo."index" = ti.tx_out_index
-						left join stake_address sa on sa.id=txo.stake_address_id
 						where ti.tx_in_id = uv.tx_id
 						limit 1
-					) source_address0
+					) source_address
 				from utxo_view uv
 				%s
 				join tx on tx.id = uv.tx_id
@@ -142,11 +144,12 @@ public class CardanoDbSyncService {
 				""", join, where, join, where);
 		return jdbcTemplate.query(query,
 				(rs, rowNum) -> new Utxo(
-						rs.getString("tx_hash"),
+						Hex.encodeHexString(rs.getBytes("tx_hash")),
 						rs.getInt("tx_index"),
 						toHexString(rs.getBytes("ma_policy_id")),
 						toHexString(rs.getBytes("ma_name")),
 						rs.getLong("value"),
+						rs.getString("owning_address"),
 						rs.getString("source_address")),
 				addr, addr);
 	}
