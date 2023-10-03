@@ -183,4 +183,11 @@ public class RestHandler {
 		return cardanoDbSyncService.isTransactionConfirmed(txId);
 	}
 
+	@Operation(summary = "Returns current tip of db")
+	@GetMapping(value = "/tip")
+	@Cacheable("getTip")
+	public Long getTip() {
+		return cardanoDbSyncService.getTip();
+	}
+
 }

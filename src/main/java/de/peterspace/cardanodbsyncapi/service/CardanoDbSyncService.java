@@ -512,6 +512,13 @@ public class CardanoDbSyncService {
 				(rs, rowNum) -> rs.getBoolean(1), Hex.decodeHex(txId));
 	}
 
+	public Long getTip() {
+		return jdbcTemplate.queryForObject("""
+				select max(slot_no) from block
+				""",
+				(rs, rowNum) -> rs.getLong(1));
+	}
+
 	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
 		return jdbcTemplate.query("""
 					with lastTransaction as (
