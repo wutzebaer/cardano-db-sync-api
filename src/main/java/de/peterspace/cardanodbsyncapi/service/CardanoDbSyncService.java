@@ -1,6 +1,5 @@
 package de.peterspace.cardanodbsyncapi.service;
 
-import java.sql.Array;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
