@@ -303,7 +303,7 @@ public class CardanoDbSyncService {
 
 		String join;
 		String where;
-		if (StringUtils.length(addr) == 59 && addr.startsWith("stake")) {
+		if (addr.startsWith("stake")) {
 			join = "join stake_address sa on sa.id=uv.stake_address_id ";
 			where = "sa.\"view\"=? ";
 		} else {
@@ -568,7 +568,7 @@ public class CardanoDbSyncService {
 	}
 
 	public List<AccountStatementRow> getStatement(String address) {
-		if (StringUtils.length(address) == 59 && address.startsWith("stake")) {
+		if (address.startsWith("stake")) {
 			return accountStatement(address);
 		} else {
 			return addressStatement(address);
