@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
+import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
 import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
@@ -25,6 +26,7 @@ import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
+import de.peterspace.cardanodbsyncapi.service.MinswapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -38,9 +40,10 @@ public class RestHandler {
 
 	private static final String SAMPLE_STAKE_ADDRESS = "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn";
 	private static final String SAMPLE_ADDRESS = "addr1qx8lsj4menq5s7w5f8jupm64n9d3aamvcppllujwse473636fhhttcg3x8kfhm6qqpvujfhgmu8jww3mfn49m3fkjssqhx0348";
-	private static final String SAMPLE_POLICY_ID = "d1edc4dfb4f5f7fb240239ad64a4730c2fd4744eda3c8a7d0fff1f92";
-	private static final String SAMPLE_ASSET_NAME = "504f524b5958383835";
+	private static final String SAMPLE_POLICY_ID = "89267e9a35153a419e1b8ffa23e511ac39ea4e3b00452e9d500f2982";
+	private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
 	private final CardanoDbSyncService cardanoDbSyncService;
+	private final MinswapService minswapService;
 
 	@Operation(summary = "Get infos where address is staked to")
 	@GetMapping(value = "/{stakeAddress}/stakeInfo")
@@ -51,8 +54,8 @@ public class RestHandler {
 
 	@Operation(summary = "Find utxos of given address or stakeAddress including multi assets")
 	@GetMapping(value = "/{address}/utxos")
-	@Cacheable("getUtxos")
-	public List<Utxo> getUtxos(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
+	@Cacheable(value = "getUtxos", sync = true)
+	public List<Utxo> getUtxos(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) throws DecoderException {
 		return cardanoDbSyncService.getUtxos(address);
 	}
 
@@ -188,6 +191,15 @@ public class RestHandler {
 	@Cacheable("getTip")
 	public Long getTip() {
 		return cardanoDbSyncService.getTip();
+	}
+
+	@Operation(summary = "Get minswap pools for token")
+	@GetMapping(value = "/minswap/{policyId}/{assetName}")
+	//@Cacheable("getMinswapPools")
+	public List<LiquidityPool> getMinswapPools(
+			@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
+			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable String assetName) throws DecoderException {
+		return minswapService.getMinswapPools(policyId, assetName);
 	}
 
 }

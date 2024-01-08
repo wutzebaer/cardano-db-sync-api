@@ -27,7 +27,7 @@
 
 	<cache alias="getUtxos">
 		<expiry>
-			<ttl unit="seconds">10</ttl>
+			<ttl unit="hours">10</ttl>
 		</expiry>
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />
@@ -156,6 +156,14 @@
 	<cache alias="getTip">
 		<expiry>
 			<ttl unit="seconds">10</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
+	<cache alias="getMinswapPools">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
 		</expiry>
 		<heap unit="entries">1000000</heap>
 		<jsr107:mbeans enable-statistics="true" />

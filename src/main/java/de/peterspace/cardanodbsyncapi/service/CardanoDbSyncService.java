@@ -14,6 +14,9 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import de.peterspace.cardano.javalib.CardanoUtils;
+import de.peterspace.cardano.javalib.CardanoUtils.AddressType;
+import de.peterspace.cardano.javalib.HexUtils;
 import de.peterspace.cardanodbsyncapi.config.TrackExecutionTime;
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
@@ -25,8 +28,6 @@ import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
-import de.peterspace.cardanodbsyncapi.utils.Utils;
-import de.peterspace.cardanodbsyncapi.utils.Utils.AddressType;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,37 @@ public class CardanoDbSyncService {
 		log.info("Creating index idx_ma_owners_policy");
 		jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
 
+		log.info("Creating materialized view minswap_utxos");
+		jdbcTemplate.execute("""
+				CREATE MATERIALIZED VIEW IF NOT exists minswap_utxos AS
+				select
+					tx.hash tx_hash,
+					uv."index" tx_index,
+					null ma_policy_id,
+					null ma_name,
+					uv.value,
+					uv.address owning_address
+				from utxo_view uv
+				join tx on tx.id = uv.tx_id
+				where
+					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex')
+				union
+				select
+					tx.hash,
+					uv."index",
+					ma."policy",
+					ma."name",
+					mto.quantity,
+					uv.address owning_address
+				from utxo_view uv
+				join tx on tx.id = uv.tx_id
+				join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+				join ma_tx_out mto on mto.tx_out_id=txo.id
+				join multi_asset ma on ma.id=mto.ident
+				where
+					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex')
+				""");
+
 		log.info("Indexes created");
 	}
 
@@ -86,18 +118,30 @@ public class CardanoDbSyncService {
 		jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ma_owners;");
 	}
 
-	public List<Utxo> getUtxos(String addr) {
+	@TrackExecutionTime
+	@Scheduled(cron = "0 0 * * * *")
+	public void updateMinswapView() {
+		log.info("Refreshing minswap_utxos");
+		jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY minswap_utxos;");
+	}
 
-		AddressType addressType = Utils.determineAddressType(addr);
+	public List<Utxo> getUtxos(String addr) throws DecoderException {
+
+		AddressType addressType = CardanoUtils.determineAddressType(addr);
 
 		String join;
 		String where;
+		byte[] hash;
 		if (addressType == AddressType.STAKE_ADDRESS) {
+			String stakeHash = CardanoUtils.stakeToHash(addr);
+			hash = Hex.decodeHex(stakeHash);
 			join = "join stake_address sa on sa.id=uv.stake_address_id ";
-			where = "sa.\"view\"=? ";
+			where = "sa.hash_raw=? ";
 		} else {
+			String paymentHash = CardanoUtils.extractPaymentHash(addr);
+			hash = Hex.decodeHex(paymentHash);
 			join = "";
-			where = "uv.address=? ";
+			where = "uv.payment_cred=? ";
 		}
 
 		String query = String.format("""
@@ -153,18 +197,38 @@ public class CardanoDbSyncService {
 						rs.getLong("value"),
 						rs.getString("owning_address"),
 						rs.getString("source_address")),
-				addr, addr);
+				hash, hash);
+	}
+
+	public List<Utxo> getMinswapUtxos(String policyId, String assetName) throws DecoderException {
+		String query = """
+				select mu.*
+				from minswap_utxos mu_find
+				join minswap_utxos mu on (mu.tx_hash=mu_find.tx_hash and mu.tx_index=mu_find.tx_index)
+				where mu_find.ma_policy_id=? and mu_find.ma_name=?
+				order by mu.tx_hash, mu.tx_index
+				""";
+		return jdbcTemplate.query(query,
+				(rs, rowNum) -> new Utxo(
+						Hex.encodeHexString(rs.getBytes("tx_hash")),
+						rs.getInt("tx_index"),
+						toHexString(rs.getBytes("ma_policy_id")),
+						toHexString(rs.getBytes("ma_name")),
+						rs.getLong("value"),
+						rs.getString("owning_address"),
+						null),
+				Hex.decodeHex(policyId), Hex.decodeHex(assetName));
 	}
 
 	public ReturnAddress getReturnAddress(String stakeAddress) {
 		try {
-			AddressType addressType = Utils.determineAddressType(stakeAddress);
+			AddressType addressType = CardanoUtils.determineAddressType(stakeAddress);
 
 			if (addressType == AddressType.SERVICE_ADDRESS) {
 				return new ReturnAddress(stakeAddress);
 			}
 
-			if (addressType == AddressType.FULL_ADDRESS) {
+			if (addressType == AddressType.SHELLY_ADDRESS) {
 				stakeAddress = getStakeAddress(stakeAddress).getAddress();
 			}
 

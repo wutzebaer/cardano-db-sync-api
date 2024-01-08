@@ -80,6 +80,11 @@
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>de.peterspace.cardano</groupId>
+			<artifactId>cardano-java-lib</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
 		<!-- DEV / TEST -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
