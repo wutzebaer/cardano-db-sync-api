@@ -409,8 +409,6 @@ public class CardanoDbSyncService {
 						group by ma."policy", ma.name
 						order by max(uv.id) desc
 						) sub
-				where
-					metadata is not null
 				""", join, where);
 		return jdbcTemplate.query(query,
 				(rs, rowNum) -> new TokenListItem(
