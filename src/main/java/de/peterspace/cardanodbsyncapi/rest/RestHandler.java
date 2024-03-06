@@ -179,6 +179,13 @@ public class RestHandler {
 		return cardanoDbSyncService.getOwners(policyId);
 	}
 
+	@Operation(summary = "Get json metadata of tx")
+	@GetMapping(value = "/transaction/{txId}/metadata")
+	@Cacheable("getTransactionMetadata")
+	public String getTransactionMetadata(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+		return cardanoDbSyncService.getTransactionMetadata(txId);
+	}
+
 	@Operation(summary = "Checks is a txid has been included in the chain")
 	@GetMapping(value = "/transaction/{txId}/confirmed")
 	@Cacheable("isTransactionConfirmed")

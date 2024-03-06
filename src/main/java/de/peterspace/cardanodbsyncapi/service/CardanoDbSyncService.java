@@ -566,6 +566,20 @@ public class CardanoDbSyncService {
 		}
 	}
 
+	public String getTransactionMetadata(String txId) throws DecoderException {
+		try {
+			return jdbcTemplate.queryForObject("""
+					select tm."json"
+					from tx t
+					join tx_metadata tm on tm.tx_id=t.id
+					where t.hash=?
+					""",
+					(rs, rowNum) -> rs.getString(1), Hex.decodeHex(txId));
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
 	public Boolean isTransactionConfirmed(String txId) throws DataAccessException, DecoderException {
 		return jdbcTemplate.queryForObject("""
 				select count(*) from tx where hash=?
