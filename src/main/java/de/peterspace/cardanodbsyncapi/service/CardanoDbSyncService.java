@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 
 import de.peterspace.cardano.javalib.CardanoUtils;
 import de.peterspace.cardano.javalib.CardanoUtils.AddressType;
-import de.peterspace.cardano.javalib.HexUtils;
 import de.peterspace.cardanodbsyncapi.config.TrackExecutionTime;
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
@@ -27,6 +26,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
+import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -575,6 +575,23 @@ public class CardanoDbSyncService {
 					where t.hash=?
 					""",
 					(rs, rowNum) -> rs.getString(1), Hex.decodeHex(txId));
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
+	public List<TxOut> getTransactionOutputs(String txId) throws DecoderException {
+		try {
+			return jdbcTemplate.query("""
+					select txo.address, txo.value
+					from tx t
+					join tx_out txo on txo.tx_id=t.id
+					where t.hash=?
+					""",
+					(rs, rowNum) -> new TxOut(
+							rs.getString("address"),
+							rs.getLong("value")),
+					Hex.decodeHex(txId));
 		} catch (EmptyResultDataAccessException e) {
 			return null;
 		}

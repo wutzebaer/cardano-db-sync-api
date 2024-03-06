@@ -24,6 +24,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
+import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
 import de.peterspace.cardanodbsyncapi.service.MinswapService;
@@ -186,6 +187,13 @@ public class RestHandler {
 		return cardanoDbSyncService.getTransactionMetadata(txId);
 	}
 
+	@Operation(summary = "Get ada outputs if tx")
+	@GetMapping(value = "/transaction/{txId}/outputs")
+	@Cacheable("getTransactionOutputs")
+	public List<TxOut> getTransactionOutputs(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+		return cardanoDbSyncService.getTransactionOutputs(txId);
+	}
+
 	@Operation(summary = "Checks is a txid has been included in the chain")
 	@GetMapping(value = "/transaction/{txId}/confirmed")
 	@Cacheable("isTransactionConfirmed")
@@ -202,7 +210,7 @@ public class RestHandler {
 
 	@Operation(summary = "Get minswap pools for token")
 	@GetMapping(value = "/minswap/{policyId}/{assetName}")
-	//@Cacheable("getMinswapPools")
+	// @Cacheable("getMinswapPools")
 	public List<LiquidityPool> getMinswapPools(
 			@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
 			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable String assetName) throws DecoderException {
