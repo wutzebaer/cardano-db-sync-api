@@ -346,8 +346,8 @@ public class CardanoDbSyncService {
 					left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
 					) sub
 				where
-					metadata is not null
-					""" + StringUtils.join(filters, " ") + """
+				""" + (StringUtils.isBlank(filter) ? "metadata is not null" : "true") + " " + """
+				""" + StringUtils.join(filters, " ") + """
 				order by ma_mint_id desc
 				limit 100
 				""",
