@@ -457,7 +457,7 @@ public class CardanoDbSyncService {
 							rs.getString("ma_policy_script"),
 							toHexString(rs.getBytes("tx_hash")),
 							rs.getLong("total_supply")),
-					Hex.decodeHex(policyId), Hex.decodeHex(assetName));
+					Hex.decodeHex(policyId), Hex.decodeHex(StringUtils.trimToEmpty(assetName)));
 		} catch (EmptyResultDataAccessException e) {
 			return null;
 		}

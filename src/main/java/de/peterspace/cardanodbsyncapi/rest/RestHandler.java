@@ -149,11 +149,11 @@ public class RestHandler {
 	}
 
 	@Operation(summary = "getTokenDetails")
-	@GetMapping(value = "/token/{policyId}/{assetName}")
+	@GetMapping(value = { "/token/{policyId}/{assetName}", "/token/{policyId}/" })
 	@Cacheable("getTokenDetails")
 	public TokenDetails getTokenDetails(
 			@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
-			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable String assetName) throws DecoderException {
+			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable(required = false) String assetName) throws DecoderException {
 		return cardanoDbSyncService.getTokenDetails(policyId, assetName);
 	}
 
