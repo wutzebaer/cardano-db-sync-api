@@ -469,7 +469,7 @@ public class CardanoDbSyncService {
 					select
 						(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
 						,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
-						,(select ticker_name from pool_offline_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
+						,(select ticker_name from off_chain_pool_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
 						,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
 					from delegation d
 					join stake_address sa on sa.id=d.addr_id
@@ -491,7 +491,7 @@ public class CardanoDbSyncService {
 	public List<PoolInfo> getPoolList() {
 		return jdbcTemplate.query("""
 				select distinct pod.ticker_name, ph."view" pool_hash
-				from pool_offline_data pod
+				from off_chain_pool_data pod
 				join pool_hash ph on ph.id=pod.pool_id
 				order by pod.ticker_name
 				""",
