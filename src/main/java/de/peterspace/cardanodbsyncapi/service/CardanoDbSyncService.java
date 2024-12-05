@@ -56,6 +56,9 @@ public class CardanoDbSyncService {
 		log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
 		jdbcTemplate.execute("CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
+		log.info("Creating index tx_metadata_tx_id_key_index");
+		jdbcTemplate.execute("CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
+
 		// token owners
 		log.info("Creating materialized view ma_owners");
 		jdbcTemplate.execute("""
@@ -74,6 +77,10 @@ public class CardanoDbSyncService {
 					ti.id is null
 					group by ma."policy", coalesce(sa."view" , txo.address);
 					""");
+
+		log.info("Creating index ma_owners");
+		jdbcTemplate.execute("CREATE UNIQUE INDEX if not exists ma_owners ON ma_owners (address, policy);");
+
 		log.info("Creating index idx_ma_owners_policy");
 		jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
 
@@ -105,8 +112,11 @@ public class CardanoDbSyncService {
 				join ma_tx_out mto on mto.tx_out_id=txo.id
 				join multi_asset ma on ma.id=mto.ident
 				where
-					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex')
+					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex');
 				""");
+
+		log.info("Creating index minswap_utxos_idx");
+		jdbcTemplate.execute("CREATE UNIQUE INDEX if not exists minswap_utxos_idx ON minswap_utxos (tx_hash, tx_index, ma_policy_id, ma_name);");
 
 		log.info("Indexes created");
 	}
