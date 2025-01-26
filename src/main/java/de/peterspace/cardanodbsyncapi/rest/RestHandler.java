@@ -36,7 +36,7 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/cardanoDbSyncApi")
+@RequestMapping("/")
 public class RestHandler {
 
 	private static final String SAMPLE_STAKE_ADDRESS = "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn";
