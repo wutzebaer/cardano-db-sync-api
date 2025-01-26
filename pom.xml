@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.4.0</version>
+		<version>3.4.2</version>
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>de.peterspace</groupId>
@@ -17,7 +17,8 @@
 
 	<properties>
 		<java.version>17</java.version>
-		<springdoc.version>2.7.0</springdoc.version>
+		<springdoc.version>2.8.3</springdoc.version>
+		<bucket4j-spring-boot-starter.version>0.12.8</bucket4j-spring-boot-starter.version>
 	</properties>
 
 	<dependencies>
@@ -46,7 +47,7 @@
 		<dependency>
 			<groupId>com.giffing.bucket4j.spring.boot.starter</groupId>
 			<artifactId>bucket4j-spring-boot-starter</artifactId>
-			<version>0.12.8</version>
+			<version>${bucket4j-spring-boot-starter.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
