@@ -1,0 +1,58 @@
+logging:
+  level:
+    root: INFO
+    de:
+      peterspace:
+        cardanodbsyncapi: DEBUG
+    org:
+      springframework:
+        web:
+          filter:
+            CommonsRequestLoggingFilter: DEBUG
+
+server:
+  shutdown: graceful
+  servlet:
+    context-path: /cardanoDbSyncApi
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-message: always
+
+spring:
+  cache:
+    jcache:
+      config: classpath:ehcache.xml
+  lifecycle:
+    timeout-per-shutdown-phase: 1m
+  task:
+    scheduling:
+      pool:
+        size: 5
+  jackson:
+    mapper:
+      default-view-inclusion: true
+    serialization:
+      indent-output: true
+  datasource:
+    url: jdbc:postgresql://localhost/cardanochain
+    username: peter
+    password: ""
+
+springdoc:
+  default-produces-media-type: application/json
+  swagger-ui:
+    use-root-path: true
+
+bucket4j:
+  enabled: false
+  filters:
+    - cache-name: buckets
+      rate-limits:
+        - cache-key: '"getRemoteAddr()"'
+          execute-predicates:
+            - PATH=/**
+          bandwidths:
+            - capacity: 5000
+              time: 1
+              unit: minutes
