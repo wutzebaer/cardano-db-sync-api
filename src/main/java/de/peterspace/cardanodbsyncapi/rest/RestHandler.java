@@ -43,6 +43,7 @@ public class RestHandler {
 	private static final String SAMPLE_ADDRESS = "addr1qx8lsj4menq5s7w5f8jupm64n9d3aamvcppllujwse473636fhhttcg3x8kfhm6qqpvujfhgmu8jww3mfn49m3fkjssqhx0348";
 	private static final String SAMPLE_POLICY_ID = "89267e9a35153a419e1b8ffa23e511ac39ea4e3b00452e9d500f2982";
 	private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
+	private static final String SAMPLE_FINGERPRINT = "asset1r9v95ujk83kx90lr3g8cd0uqu5de3kqjptp7sm";
 	private final CardanoDbSyncService cardanoDbSyncService;
 	private final MinswapService minswapService;
 
@@ -56,14 +57,16 @@ public class RestHandler {
 	@Operation(summary = "Find utxos of given address or stakeAddress including multi assets")
 	@GetMapping(value = "/{address}/utxos")
 	@Cacheable(value = "getUtxos", sync = true)
-	public List<Utxo> getUtxos(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) throws DecoderException {
+	public List<Utxo> getUtxos(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address)
+			throws DecoderException {
 		return cardanoDbSyncService.getUtxos(address);
 	}
 
 	@Operation(summary = "Find the first known address with the same stake address, which should not be mangled")
 	@GetMapping(value = "/{stakeAddress}/returnAddress")
 	@Cacheable("getReturnAddress")
-	public ReturnAddress getReturnAddress(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) {
+	public ReturnAddress getReturnAddress(
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) {
 		return cardanoDbSyncService.getReturnAddress(stakeAddress);
 	}
 
@@ -77,14 +80,17 @@ public class RestHandler {
 	@Operation(summary = "Find stakeAddress by stakeAddressHash")
 	@GetMapping(value = "/stakeAddress/{stakeAddressHash}")
 	@Cacheable("getStakeAddressByHash")
-	public StakeAddress getStakeAddressByHash(@Parameter(example = "e1ddbe7a587e6bdd2674bf53fc093226bbd43af035f4ea07d781167966") @PathVariable String stakeAddressHash) throws DecoderException {
+	public StakeAddress getStakeAddressByHash(
+			@Parameter(example = "e1ddbe7a587e6bdd2674bf53fc093226bbd43af035f4ea07d781167966") @PathVariable String stakeAddressHash)
+			throws DecoderException {
 		return cardanoDbSyncService.getStakeAddressByHash(stakeAddressHash);
 	}
 
 	@Operation(summary = "Find stakeAddressHash by stakeAddress")
 	@GetMapping(value = "/stakeHash/{stakeAddress}")
 	@Cacheable("getStakeHashByAddress")
-	public StakeAddress getStakeHashByAddress(@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) throws DecoderException {
+	public StakeAddress getStakeHashByAddress(
+			@Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) throws DecoderException {
 		return cardanoDbSyncService.getStakeHashByAddress(stakeAddress);
 	}
 
@@ -94,7 +100,8 @@ public class RestHandler {
 	public List<TokenListItem> getTokenList(
 			@RequestParam(required = false) Long afterMintid,
 			@RequestParam(required = false) Long beforeMintid,
-			@Parameter(example = SAMPLE_POLICY_ID) @RequestParam(required = false) String filter) throws DecoderException {
+			@Parameter(example = SAMPLE_POLICY_ID) @RequestParam(required = false) String filter)
+			throws DecoderException {
 		return cardanoDbSyncService.getTokenList(afterMintid, beforeMintid, filter);
 	}
 
@@ -137,24 +144,35 @@ public class RestHandler {
 	@PostMapping(value = "/lastMint")
 	@Cacheable("getLastMint")
 	public List<TokenDetails> getLastMint(
-			@io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = { @ExampleObject(value = """
-					{
-					  "stakeAddress": "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn",
-					  "policyIds": [
-					    "38e97ac082af9312c69c9e2b0949c0d7873f0bbca34b0a8905ec2441"
-					  ]
-					}
-					""") })) @RequestBody GetLastMintRequest getLastMintRequest) {
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = {
+					@ExampleObject(value = """
+							{
+							  "stakeAddress": "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn",
+							  "policyIds": [
+							    "38e97ac082af9312c69c9e2b0949c0d7873f0bbca34b0a8905ec2441"
+							  ]
+							}
+							""") })) @RequestBody GetLastMintRequest getLastMintRequest) {
 		return cardanoDbSyncService.getLastMint(getLastMintRequest.stakeAddress, getLastMintRequest.policyIds);
 	}
 
 	@Operation(summary = "getTokenDetails")
-	@GetMapping(value = { "/token/{policyId}/{assetName}", "/token/{policyId}/" })
+	@GetMapping(value = { "/token/{policyId}/{assetName}" })
 	@Cacheable("getTokenDetails")
 	public TokenDetails getTokenDetails(
 			@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
-			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable(required = false) String assetName) throws DecoderException {
+			@Parameter(example = SAMPLE_ASSET_NAME) @PathVariable(required = false) String assetName)
+			throws DecoderException {
 		return cardanoDbSyncService.getTokenDetails(policyId, assetName);
+	}
+
+	@Operation(summary = "getTokenDetailsByFingerprint")
+	@GetMapping(value = { "/token/{fingerprint}/" })
+	@Cacheable("getTokenDetails")
+	public TokenDetails getTokenDetails(
+			@Parameter(example = SAMPLE_FINGERPRINT) @PathVariable String fingerprint)
+			throws DecoderException {
+		return cardanoDbSyncService.getTokenDetails(fingerprint);
 	}
 
 	@Operation(summary = "getPoolList")
@@ -176,28 +194,35 @@ public class RestHandler {
 	@Operation(summary = "Get all token owners of a policyId, values get updated twice a day")
 	@GetMapping(value = "/policy/{policyId}/owners")
 	@Cacheable("getOwners")
-	public List<OwnerInfo> getOwners(@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId) throws DecoderException {
+	public List<OwnerInfo> getOwners(@Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId)
+			throws DecoderException {
 		return cardanoDbSyncService.getOwners(policyId);
 	}
 
 	@Operation(summary = "Get json metadata of tx")
 	@GetMapping(value = "/transaction/{txId}/metadata")
 	@Cacheable("getTransactionMetadata")
-	public String getTransactionMetadata(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+	public String getTransactionMetadata(
+			@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId)
+			throws DataAccessException, DecoderException {
 		return cardanoDbSyncService.getTransactionMetadata(txId);
 	}
 
 	@Operation(summary = "Get ada outputs if tx")
 	@GetMapping(value = "/transaction/{txId}/outputs")
 	@Cacheable("getTransactionOutputs")
-	public List<TxOut> getTransactionOutputs(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+	public List<TxOut> getTransactionOutputs(
+			@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId)
+			throws DataAccessException, DecoderException {
 		return cardanoDbSyncService.getTransactionOutputs(txId);
 	}
 
 	@Operation(summary = "Checks is a txid has been included in the chain")
 	@GetMapping(value = "/transaction/{txId}/confirmed")
 	@Cacheable("isTransactionConfirmed")
-	public Boolean isTransactionConfirmed(@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId) throws DataAccessException, DecoderException {
+	public Boolean isTransactionConfirmed(
+			@Parameter(example = "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58") @PathVariable String txId)
+			throws DataAccessException, DecoderException {
 		return cardanoDbSyncService.isTransactionConfirmed(txId);
 	}
 

@@ -49,15 +49,18 @@ public class CardanoDbSyncService {
 
 		// find multi asset by fingerprint
 		log.info("Creating index idx_multi_asset_fingerprint");
-		jdbcTemplate.execute("CREATE index if not exists idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
+		jdbcTemplate.execute(
+				"CREATE index if not exists idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
 
 		// index for utxo view, to lookup used txos dirctly with txid and idx, not only
 		// txid
 		log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
-		jdbcTemplate.execute("CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
+		jdbcTemplate.execute(
+				"CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
 		log.info("Creating index tx_metadata_tx_id_key_index");
-		jdbcTemplate.execute("CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
+		jdbcTemplate.execute(
+				"CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
 
 		// token owners
 		log.info("Creating materialized view ma_owners");
@@ -116,7 +119,8 @@ public class CardanoDbSyncService {
 				""");
 
 		log.info("Creating index minswap_utxos_idx");
-		jdbcTemplate.execute("CREATE UNIQUE INDEX if not exists minswap_utxos_idx ON minswap_utxos (tx_hash, tx_index, ma_policy_id, ma_name);");
+		jdbcTemplate.execute(
+				"CREATE UNIQUE INDEX if not exists minswap_utxos_idx ON minswap_utxos (tx_hash, tx_index, ma_policy_id, ma_name);");
 
 		log.info("Indexes created");
 	}
@@ -293,7 +297,8 @@ public class CardanoDbSyncService {
 		}
 	}
 
-	public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter) throws DecoderException {
+	public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter)
+			throws DecoderException {
 
 		List<String> filters = new ArrayList<String>();
 		List<Object> filterParams = new ArrayList<Object>();
@@ -326,41 +331,43 @@ public class CardanoDbSyncService {
 			}
 		}
 
-		return jdbcTemplate.query("""
-				select
-					ma_mint_id
-					,slot_no
-					,ma_policy_id
-					,ma_name
-					,ma_fingerprint
-					,quantity
-					,metadata->>'name' "name"
-					,case
-						WHEN jsonb_typeof(metadata->'image') = 'array'
-						then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
-				    	ELSE metadata->>'image'
-				  	END "image"
-				from (
-					select
-						mtm.id ma_mint_id
-						,b.slot_no
-						,ma."policy" ma_policy_id
-						,ma.name ma_name
-						,ma.fingerprint ma_fingerprint
-						,mtm.quantity
-						,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metaData
-					from ma_tx_mint mtm
-					join multi_asset ma on ma.id = mtm.ident
-					join tx on tx.id = mtm.tx_id
-					join block b on b.id = tx.block_id
-					left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
-					) sub
-				where
-				""" + (StringUtils.isBlank(filter) ? "metadata is not null" : "true") + " " + """
-				""" + StringUtils.join(filters, " ") + """
-				order by ma_mint_id desc
-				limit 100
-				""",
+		return jdbcTemplate.query(
+				"""
+						select
+							ma_mint_id
+							,slot_no
+							,ma_policy_id
+							,ma_name
+							,ma_fingerprint
+							,quantity
+							,metadata->>'name' "name"
+							,case
+								WHEN jsonb_typeof(metadata->'image') = 'array'
+								then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
+						    	ELSE metadata->>'image'
+						  	END "image"
+						from (
+							select
+								mtm.id ma_mint_id
+								,b.slot_no
+								,ma."policy" ma_policy_id
+								,ma.name ma_name
+								,ma.fingerprint ma_fingerprint
+								,mtm.quantity
+								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metaData
+							from ma_tx_mint mtm
+							join multi_asset ma on ma.id = mtm.ident
+							join tx on tx.id = mtm.tx_id
+							join block b on b.id = tx.block_id
+							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+							) sub
+						where
+						"""
+						+ (StringUtils.isBlank(filter) ? "metadata is not null" : "true") + " " + """
+								""" + StringUtils.join(filters, " ") + """
+								order by ma_mint_id desc
+								limit 100
+								""",
 				(rs, rowNum) -> new TokenListItem(
 						rs.getLong("ma_mint_id"),
 						rs.getLong("slot_no"),
@@ -385,41 +392,43 @@ public class CardanoDbSyncService {
 			where = "uv.address=? ";
 		}
 
-		String query = String.format("""
-				select
-					ma_policy_id
-					,ma_name
-					,ma_fingerprint
-					,quantity
-					,metadata->>'name' "name"
-					,case
-						WHEN jsonb_typeof(metadata->'image') = 'array'
-						then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
-				    	ELSE metadata->>'image'
-				  	END "image"
-				from (
+		String query = String.format(
+				"""
 						select
-							ma."policy" ma_policy_id
-							,ma.name ma_name
-							,max(ma.fingerprint) ma_fingerprint
-							,sum(mto.quantity) quantity
-							,(select
-								coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex'))
-								from ma_tx_mint mtm
-								join tx_metadata tm on tm.tx_id=mtm.tx_id and tm."key"=721
-								where mtm.ident=max(mto.ident) and mtm.quantity>0
-								order by tm.id desc limit 1) metaData
-						from utxo_view uv
-						%s
-						join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
-						join ma_tx_out mto on mto.tx_out_id=txo.id
-						join multi_asset ma on ma.id=mto.ident
-						where
-							%s
-						group by ma."policy", ma.name
-						order by max(uv.id) desc
-						) sub
-				""", join, where);
+							ma_policy_id
+							,ma_name
+							,ma_fingerprint
+							,quantity
+							,metadata->>'name' "name"
+							,case
+								WHEN jsonb_typeof(metadata->'image') = 'array'
+								then (select string_agg(value, '') from jsonb_array_elements_text(metadata->'image'))
+						    	ELSE metadata->>'image'
+						  	END "image"
+						from (
+								select
+									ma."policy" ma_policy_id
+									,ma.name ma_name
+									,max(ma.fingerprint) ma_fingerprint
+									,sum(mto.quantity) quantity
+									,(select
+										coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex'))
+										from ma_tx_mint mtm
+										join tx_metadata tm on tm.tx_id=mtm.tx_id and tm."key"=721
+										where mtm.ident=max(mto.ident) and mtm.quantity>0
+										order by tm.id desc limit 1) metaData
+								from utxo_view uv
+								%s
+								join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+								join ma_tx_out mto on mto.tx_out_id=txo.id
+								join multi_asset ma on ma.id=mto.ident
+								where
+									%s
+								group by ma."policy", ma.name
+								order by max(uv.id) desc
+								) sub
+						""",
+				join, where);
 		return jdbcTemplate.query(query,
 				(rs, rowNum) -> new TokenListItem(
 						null,
@@ -435,29 +444,30 @@ public class CardanoDbSyncService {
 
 	public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {
 		try {
-			return jdbcTemplate.queryForObject("""
-					select
-						b.slot_no
-						,ma."policy" ma_policy_id
-						,ma.name ma_name
-						,ma.fingerprint
-						,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
-						,script.json ma_policy_script
-						,tx.hash tx_hash
-						,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
-					from ma_tx_mint mtm
-					join multi_asset ma on ma.id = mtm.ident
-					join tx on tx.id = mtm.tx_id
-					join block b on b.id = tx.block_id
-					left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
-					join script on script.hash=ma."policy"
-					where
-						ma."policy"=?
-						and ma."name"=?
-						and mtm.quantity>0
-					order by mtm.id desc
-					limit 1
-					""",
+			return jdbcTemplate.queryForObject(
+					"""
+							select
+								b.slot_no
+								,ma."policy" ma_policy_id
+								,ma.name ma_name
+								,ma.fingerprint
+								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
+								,script.json ma_policy_script
+								,tx.hash tx_hash
+								,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
+							from ma_tx_mint mtm
+							join multi_asset ma on ma.id = mtm.ident
+							join tx on tx.id = mtm.tx_id
+							join block b on b.id = tx.block_id
+							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+							join script on script.hash=ma."policy"
+							where
+								ma."policy"=?
+								and ma."name"=?
+								and mtm.quantity>0
+							order by mtm.id desc
+							limit 1
+							""",
 					(rs, rowNum) -> new TokenDetails(
 							rs.getLong("slot_no"),
 							toHexString(rs.getBytes("ma_policy_id")),
@@ -473,20 +483,61 @@ public class CardanoDbSyncService {
 		}
 	}
 
+	public TokenDetails getTokenDetails(String fingerprint) throws DecoderException {
+		try {
+			return jdbcTemplate.queryForObject(
+					"""
+							select
+								b.slot_no
+								,ma."policy" ma_policy_id
+								,ma.name ma_name
+								,ma.fingerprint
+								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
+								,script.json ma_policy_script
+								,tx.hash tx_hash
+								,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
+							from ma_tx_mint mtm
+							join multi_asset ma on ma.id = mtm.ident
+							join tx on tx.id = mtm.tx_id
+							join block b on b.id = tx.block_id
+							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+							join script on script.hash=ma."policy"
+							where
+								ma."fingerprint"=?
+								and mtm.quantity>0
+							order by mtm.id desc
+							limit 1
+							""",
+					(rs, rowNum) -> new TokenDetails(
+							rs.getLong("slot_no"),
+							toHexString(rs.getBytes("ma_policy_id")),
+							toHexString(rs.getBytes("ma_name")),
+							rs.getString("fingerprint"),
+							rs.getString("metadata"),
+							rs.getString("ma_policy_script"),
+							toHexString(rs.getBytes("tx_hash")),
+							rs.getLong("total_supply")),
+					fingerprint);
+		} catch (EmptyResultDataAccessException e) {
+			return null;
+		}
+	}
+
 	public StakeInfo getStakeInfo(String stakeAddress) {
 		try {
-			return jdbcTemplate.queryForObject("""
-					select
-						(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
-						,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
-						,(select ticker_name from off_chain_pool_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
-						,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
-					from delegation d
-					join stake_address sa on sa.id=d.addr_id
-					where sa."view"=?
-					order by d.id desc
-					limit 1
-					""",
+			return jdbcTemplate.queryForObject(
+					"""
+							select
+								(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
+								,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
+								,(select ticker_name from off_chain_pool_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
+								,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
+							from delegation d
+							join stake_address sa on sa.id=d.addr_id
+							where sa."view"=?
+							order by d.id desc
+							limit 1
+							""",
 					(rs, rowNum) -> new StakeInfo(
 							rs.getLong("stake"),
 							rs.getString("pool_hash"),
@@ -622,36 +673,37 @@ public class CardanoDbSyncService {
 	}
 
 	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
-		return jdbcTemplate.query("""
-					with lastTransaction as (
-						select t2.hash
-						from ma_tx_mint mtm
-						join multi_asset ma ON ma.id=mtm.ident
-						join tx_out to2 on to2.tx_id=mtm.tx_id
-						join tx t2 on t2.id=mtm.tx_id
-						join stake_address sa on sa.id=to2.stake_address_id
-						where sa.view=? AND ma."policy"=ANY(?)
-						order by mtm.id desc
-						limit 1
-					)
-					select
-						b.slot_no
-						,ma."policy" ma_policy_id
-						,ma.name ma_name
-						,ma.fingerprint
-						,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
-						,script.json ma_policy_script
-						,tx.hash tx_hash
-						,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
-					from ma_tx_mint mtm
-					join multi_asset ma ON ma.id=mtm.ident
-					join tx on tx.id=mtm.tx_id
-					join block b on b.id = tx.block_id
-					left join tx_metadata tm on tm.tx_id = tx.id and tm."key"=721
-					join script on script.hash=ma."policy"
-					where tx.hash=(select hash from lastTransaction)
-					order by ma.id desc
-				""",
+		return jdbcTemplate.query(
+				"""
+							with lastTransaction as (
+								select t2.hash
+								from ma_tx_mint mtm
+								join multi_asset ma ON ma.id=mtm.ident
+								join tx_out to2 on to2.tx_id=mtm.tx_id
+								join tx t2 on t2.id=mtm.tx_id
+								join stake_address sa on sa.id=to2.stake_address_id
+								where sa.view=? AND ma."policy"=ANY(?)
+								order by mtm.id desc
+								limit 1
+							)
+							select
+								b.slot_no
+								,ma."policy" ma_policy_id
+								,ma.name ma_name
+								,ma.fingerprint
+								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
+								,script.json ma_policy_script
+								,tx.hash tx_hash
+								,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
+							from ma_tx_mint mtm
+							join multi_asset ma ON ma.id=mtm.ident
+							join tx on tx.id=mtm.tx_id
+							join block b on b.id = tx.block_id
+							left join tx_metadata tm on tm.tx_id = tx.id and tm."key"=721
+							join script on script.hash=ma."policy"
+							where tx.hash=(select hash from lastTransaction)
+							order by ma.id desc
+						""",
 				(rs, rowNum) -> new TokenDetails(
 						rs.getLong("slot_no"),
 						toHexString(rs.getBytes("ma_policy_id")),
@@ -679,143 +731,145 @@ public class CardanoDbSyncService {
 	}
 
 	private List<AccountStatementRow> addressStatement(String address) {
-		return jdbcTemplate.query("""
-				select
-					"time" "timestamp",
-					min("epoch_no") epoch,
-					min(encode(hash, 'hex')) tx_hash,
-					sum("WITHDRAWN") withdrawn,
-					sum("REWARDS") rewards,
-					sum("OUT") "OUT",
-					sum("IN") "IN",
-					(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
-					sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
-					string_agg(distinct "TYPE", ',') operations
-					from (
-							-- normal input
-							select
-								t2.id txId,
-								b2.time,
-								b2.epoch_no,
-								t2.hash,
-								'IN' "TYPE",
-								0 "OUT",
-								to2.value "IN",
-								0 "WITHDRAWN",
-								0 "REWARDS"
-							from tx_out to2
-							join tx t2 on t2.id=to2.tx_id
-							join block b2 on b2.id=t2.block_id
-							where to2.address = ?
-							union all
-							-- normal output
-							select
-								t2.id txId,
-								b2.time,
-								b2.epoch_no,
-								t2.hash,
-								'OUT' "TYPE",
-								to2.value "OUT",
-								0 "IN",
-								0 "WITHDRAWN",
-								0 "REWARDS"
-							from tx_in ti
-							join tx t2 on t2.id=ti.tx_in_id
-							join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
-							join block b2 on b2.id=t2.block_id
-							where to2.address = ?
-				) movings
-				group by "timestamp", txId
-				order by "timestamp" desc, txId desc
-				""",
+		return jdbcTemplate.query(
+				"""
+						select
+							"time" "timestamp",
+							min("epoch_no") epoch,
+							min(encode(hash, 'hex')) tx_hash,
+							sum("WITHDRAWN") withdrawn,
+							sum("REWARDS") rewards,
+							sum("OUT") "OUT",
+							sum("IN") "IN",
+							(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
+							sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
+							string_agg(distinct "TYPE", ',') operations
+							from (
+									-- normal input
+									select
+										t2.id txId,
+										b2.time,
+										b2.epoch_no,
+										t2.hash,
+										'IN' "TYPE",
+										0 "OUT",
+										to2.value "IN",
+										0 "WITHDRAWN",
+										0 "REWARDS"
+									from tx_out to2
+									join tx t2 on t2.id=to2.tx_id
+									join block b2 on b2.id=t2.block_id
+									where to2.address = ?
+									union all
+									-- normal output
+									select
+										t2.id txId,
+										b2.time,
+										b2.epoch_no,
+										t2.hash,
+										'OUT' "TYPE",
+										to2.value "OUT",
+										0 "IN",
+										0 "WITHDRAWN",
+										0 "REWARDS"
+									from tx_in ti
+									join tx t2 on t2.id=ti.tx_in_id
+									join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+									join block b2 on b2.id=t2.block_id
+									where to2.address = ?
+						) movings
+						group by "timestamp", txId
+						order by "timestamp" desc, txId desc
+						""",
 				accountStatementRowMapper,
 				address, address);
 	}
 
 	private List<AccountStatementRow> accountStatement(String stakeAddress) {
-		return jdbcTemplate.query("""
-				select
-					"time" "timestamp",
-					min("epoch_no") epoch,
-					min(encode(hash, 'hex')) tx_hash,
-					sum("WITHDRAWN") withdrawn,
-					sum("REWARDS") rewards,
-					sum("OUT") "OUT",
-					sum("IN") "IN",
-					(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
-					sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
-					string_agg(distinct "TYPE", ',') operations
-					from (
-							-- normal input
-							select
-								t2.id txId,
-								b2.time,
-								b2.epoch_no,
-								t2.hash,
-								'IN' "TYPE",
-								0 "OUT",
-								to2.value "IN",
-								0 "WITHDRAWN",
-								0 "REWARDS"
-							from tx_out to2
-							join tx t2 on t2.id=to2.tx_id
-							join block b2 on b2.id=t2.block_id
-							join stake_address sa on sa.id=to2.stake_address_id
-							where sa."view" = ?
-							union all
-							-- normal output
-							select
-								t2.id txId,
-								b2.time,
-								b2.epoch_no,
-								t2.hash,
-								'OUT' "TYPE",
-								to2.value "OUT",
-								0 "IN",
-								0 "WITHDRAWN",
-								0 "REWARDS"
-							from tx_in ti
-							join tx t2 on t2.id=ti.tx_in_id
-							join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
-							join block b2 on b2.id=t2.block_id
-							join stake_address sa on sa.id=to2.stake_address_id
-							where sa."view" = ?
-							union all
-							-- withdrawn
-							select
-								t2.id txId,
-								b2.time,
-								b2.epoch_no,
-								t2.hash,
-								'WITHDRAW' "TYPE",
-								0 "OUT",
-								0 "IN",
-								wi.amount "WITHDRAWN",
-								0 "REWARDS"
-							from withdrawal wi
-							join tx t2 on t2.id=wi.tx_id
-							join block b2 on b2.id=t2.block_id
-							join stake_address sa on sa.id=wi.addr_id
-							where sa."view" = ?
-							union all
-							-- generated reward
-							select
-								0 "txId",
-								TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091),
-								rw.earned_epoch epoch_no,
-								null hash,
-								'REWARD_'||rw."type" "TYPE",
-								0 "OUT",
-								0 "IN",
-								0 "WITHDRAWN",
-								rw.amount "REWARDS"
-							from reward rw
-							join stake_address sa on sa.id=rw.addr_id
-							where sa."view" = ?
-				) movings
-				group by "timestamp", txId
-				order by "timestamp" desc, txId desc
-				""",
+		return jdbcTemplate.query(
+				"""
+						select
+							"time" "timestamp",
+							min("epoch_no") epoch,
+							min(encode(hash, 'hex')) tx_hash,
+							sum("WITHDRAWN") withdrawn,
+							sum("REWARDS") rewards,
+							sum("OUT") "OUT",
+							sum("IN") "IN",
+							(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) "change",
+							sum(sum("IN")-sum("OUT")-sum("WITHDRAWN")+sum("REWARDS")) over (order by min("time") asc, txId asc rows between unbounded preceding and current row),
+							string_agg(distinct "TYPE", ',') operations
+							from (
+									-- normal input
+									select
+										t2.id txId,
+										b2.time,
+										b2.epoch_no,
+										t2.hash,
+										'IN' "TYPE",
+										0 "OUT",
+										to2.value "IN",
+										0 "WITHDRAWN",
+										0 "REWARDS"
+									from tx_out to2
+									join tx t2 on t2.id=to2.tx_id
+									join block b2 on b2.id=t2.block_id
+									join stake_address sa on sa.id=to2.stake_address_id
+									where sa."view" = ?
+									union all
+									-- normal output
+									select
+										t2.id txId,
+										b2.time,
+										b2.epoch_no,
+										t2.hash,
+										'OUT' "TYPE",
+										to2.value "OUT",
+										0 "IN",
+										0 "WITHDRAWN",
+										0 "REWARDS"
+									from tx_in ti
+									join tx t2 on t2.id=ti.tx_in_id
+									join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+									join block b2 on b2.id=t2.block_id
+									join stake_address sa on sa.id=to2.stake_address_id
+									where sa."view" = ?
+									union all
+									-- withdrawn
+									select
+										t2.id txId,
+										b2.time,
+										b2.epoch_no,
+										t2.hash,
+										'WITHDRAW' "TYPE",
+										0 "OUT",
+										0 "IN",
+										wi.amount "WITHDRAWN",
+										0 "REWARDS"
+									from withdrawal wi
+									join tx t2 on t2.id=wi.tx_id
+									join block b2 on b2.id=t2.block_id
+									join stake_address sa on sa.id=wi.addr_id
+									where sa."view" = ?
+									union all
+									-- generated reward
+									select
+										0 "txId",
+										TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091),
+										rw.earned_epoch epoch_no,
+										null hash,
+										'REWARD_'||rw."type" "TYPE",
+										0 "OUT",
+										0 "IN",
+										0 "WITHDRAWN",
+										rw.amount "REWARDS"
+									from reward rw
+									join stake_address sa on sa.id=rw.addr_id
+									where sa."view" = ?
+						) movings
+						group by "timestamp", txId
+						order by "timestamp" desc, txId desc
+						""",
 				accountStatementRowMapper,
 				stakeAddress, stakeAddress, stakeAddress, stakeAddress);
 	}
