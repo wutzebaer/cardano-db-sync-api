@@ -443,71 +443,53 @@ public class CardanoDbSyncService {
 	}
 
 	public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {
-		try {
-			return jdbcTemplate.queryForObject(
-					"""
-							select
-								b.slot_no
-								,ma."policy" ma_policy_id
-								,ma.name ma_name
-								,ma.fingerprint
-								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
-								,script.json ma_policy_script
-								,tx.hash tx_hash
-								,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
-							from ma_tx_mint mtm
-							join multi_asset ma on ma.id = mtm.ident
-							join tx on tx.id = mtm.tx_id
-							join block b on b.id = tx.block_id
-							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
-							join script on script.hash=ma."policy"
-							where
-								ma."policy"=?
-								and ma."name"=?
-								and mtm.quantity>0
-							order by mtm.id desc
-							limit 1
-							""",
-					(rs, rowNum) -> new TokenDetails(
-							rs.getLong("slot_no"),
-							toHexString(rs.getBytes("ma_policy_id")),
-							toHexString(rs.getBytes("ma_name")),
-							rs.getString("fingerprint"),
-							rs.getString("metadata"),
-							rs.getString("ma_policy_script"),
-							toHexString(rs.getBytes("tx_hash")),
-							rs.getLong("total_supply")),
-					Hex.decodeHex(policyId), Hex.decodeHex(StringUtils.trimToEmpty(assetName)));
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
+		return getTokenDetails(policyId, assetName, null);
 	}
 
 	public TokenDetails getTokenDetails(String fingerprint) throws DecoderException {
+		return getTokenDetails(null, null, fingerprint);
+	}
+
+	private TokenDetails getTokenDetails(String policyId, String assetName, String fingerprint)
+			throws DecoderException {
+		String query = """
+				select
+					b.slot_no
+					,ma."policy" ma_policy_id
+					,ma.name ma_name
+					,ma.fingerprint
+					,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
+					,script.json ma_policy_script
+					,tx.hash tx_hash
+					,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
+				from ma_tx_mint mtm
+				join multi_asset ma on ma.id = mtm.ident
+				join tx on tx.id = mtm.tx_id
+				join block b on b.id = tx.block_id
+				left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
+				join script on script.hash=ma."policy"
+				where
+					%s
+					and mtm.quantity>0
+				order by mtm.id desc
+				limit 1
+				""";
+		String whereClause;
+		Object[] params;
+
+		if (policyId != null && assetName != null) {
+			whereClause = "ma.\"policy\"=? and ma.\"name\"=?";
+			params = new Object[] { Hex.decodeHex(policyId), Hex.decodeHex(StringUtils.trimToEmpty(assetName)) };
+		} else if (fingerprint != null) {
+			whereClause = "ma.\"fingerprint\"=?";
+			params = new Object[] { fingerprint };
+		} else {
+			throw new IllegalArgumentException("Either policyId and assetName or fingerprint must be provided");
+		}
+
 		try {
 			return jdbcTemplate.queryForObject(
-					"""
-							select
-								b.slot_no
-								,ma."policy" ma_policy_id
-								,ma.name ma_name
-								,ma.fingerprint
-								,coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) metadata
-								,script.json ma_policy_script
-								,tx.hash tx_hash
-								,(select sum(quantity) from ma_tx_mint mtm_total where mtm_total.ident = mtm.ident) total_supply
-							from ma_tx_mint mtm
-							join multi_asset ma on ma.id = mtm.ident
-							join tx on tx.id = mtm.tx_id
-							join block b on b.id = tx.block_id
-							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
-							join script on script.hash=ma."policy"
-							where
-								ma."fingerprint"=?
-								and mtm.quantity>0
-							order by mtm.id desc
-							limit 1
-							""",
+					String.format(query, whereClause),
 					(rs, rowNum) -> new TokenDetails(
 							rs.getLong("slot_no"),
 							toHexString(rs.getBytes("ma_policy_id")),
@@ -517,7 +499,7 @@ public class CardanoDbSyncService {
 							rs.getString("ma_policy_script"),
 							toHexString(rs.getBytes("tx_hash")),
 							rs.getLong("total_supply")),
-					fingerprint);
+					params);
 		} catch (EmptyResultDataAccessException e) {
 			return null;
 		}
