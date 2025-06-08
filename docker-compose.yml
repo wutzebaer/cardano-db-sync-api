@@ -16,6 +16,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
       - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
-networks:
-  cardano-tools-network:
-    external: true
+networks: 
+  default: 
+    external: 
+      name: cardano-tools-network
