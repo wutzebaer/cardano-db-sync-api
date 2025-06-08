@@ -1,0 +1,48 @@
+{
+    "name": "Java",
+    "image": "mcr.microsoft.com/devcontainers/java:21",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vmware.vscode-boot-dev-pack",
+                "vscjava.vscode-java-test",
+                "mhutchie.git-graph",
+                "esbenp.prettier-vscode",
+                "natqe.reload",
+                "Gruntfuggly.todo-tree",
+                "ryuta46.multi-command",
+                "emeraldwalk.RunOnSave"
+            ],
+            "settings": {
+                "git.postCommitCommand": "none",
+                "editor.formatOnSave": false,
+                "emeraldwalk.runonsave": {
+                    "commands": [
+                        {
+                            "cmd": "bash -i -c 'mvnd spotless:apply'"
+                        }
+                    ]
+                },
+                "editor.codeActionsOnSave": {
+                    "source.fixAll": "never",
+                    "source.organizeImports": "never"
+                }
+            }
+        }
+    },
+    "mounts": [
+        "type=volume,source=cursor-server-tradebot,target=/root/.cursor-server",
+        "type=bind,source=/mnt/c/Users/wutze/.m2,target=/home/vscode/.m2"
+    ],
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "version": "latest"
+        },
+        "ghcr.io/devcontainers-extra/features/mvnd-sdkman:2": {
+            "version": "latest"
+        }
+    },
+    "containerEnv": {
+        "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
+    }
+}

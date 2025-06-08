@@ -1,5 +1,6 @@
 package de.peterspace.cardanodbsyncapi.service;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import de.peterspace.cardano.javalib.CardanoUtils.AddressType;
 import de.peterspace.cardanodbsyncapi.config.TrackExecutionTime;
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
+import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
 import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
@@ -89,38 +91,26 @@ public class CardanoDbSyncService {
 
 		log.info("Creating materialized view minswap_utxos");
 		jdbcTemplate.execute("""
-				CREATE MATERIALIZED VIEW IF NOT exists minswap_utxos AS
-				select
-					tx.hash tx_hash,
-					uv."index" tx_index,
-					null ma_policy_id,
-					null ma_name,
-					uv.value,
-					uv.address owning_address
-				from utxo_view uv
-				join tx on tx.id = uv.tx_id
-				where
-					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex')
-				union
-				select
-					tx.hash,
-					uv."index",
-					ma."policy",
-					ma."name",
-					mto.quantity,
-					uv.address owning_address
-				from utxo_view uv
-				join tx on tx.id = uv.tx_id
-				join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
-				join ma_tx_out mto on mto.tx_out_id=txo.id
-				join multi_asset ma on ma.id=mto.ident
-				where
-					uv.payment_cred=decode('e1317b152faac13426e6a83e06ff88a4d62cce3c1634ab0a5ec13309', 'hex');
+					CREATE MATERIALIZED VIEW IF NOT exists minswap_pools AS
+						select
+							ma_a."policy" policy_a,
+							ma_a."name" name_a,
+							mto_a.quantity quantity_a,
+							ma_b."policy" policy_b,
+							ma_b."name" name_b,
+							coalesce(mto_b.quantity, uv.value) quantity_b
+						from utxo_view uv
+						join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+						join ma_tx_out mto_a on mto_a.tx_out_id=txo.id
+						join multi_asset ma_a on ma_a.id=mto_a.ident and ma_a."policy" != decode('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c', 'hex')
+						left join (ma_tx_out mto_b join multi_asset ma_b on ma_b.id = mto_b.ident and ma_b."policy" != decode('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c', 'hex')) on mto_b.tx_out_id = txo.id and mto_b.id != mto_a.id
+						where
+							uv.payment_cred = decode('ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b', 'hex')
 				""");
 
 		log.info("Creating index minswap_utxos_idx");
 		jdbcTemplate.execute(
-				"CREATE UNIQUE INDEX if not exists minswap_utxos_idx ON minswap_utxos (tx_hash, tx_index, ma_policy_id, ma_name);");
+				"CREATE INDEX if not exists minswap_pools_idx ON minswap_pools (policy_a, name_a);");
 
 		log.info("Indexes created");
 	}
@@ -214,24 +204,21 @@ public class CardanoDbSyncService {
 				hash, hash);
 	}
 
-	public List<Utxo> getMinswapUtxos(String policyId, String assetName) throws DecoderException {
+	public List<LiquidityPool> getMinswapPools(String policyId, String assetName) throws DecoderException {
 		String query = """
-				select mu.*
-				from minswap_utxos mu_find
-				join minswap_utxos mu on (mu.tx_hash=mu_find.tx_hash and mu.tx_index=mu_find.tx_index)
-				where mu_find.ma_policy_id=? and mu_find.ma_name=?
-				order by mu.tx_hash, mu.tx_index
+				select policy_a, name_a, quantity_a, policy_b, name_b, quantity_b
+				from minswap_pools
+				where policy_a=? and name_a=?
 				""";
 		return jdbcTemplate.query(query,
-				(rs, rowNum) -> new Utxo(
-						Hex.encodeHexString(rs.getBytes("tx_hash")),
-						rs.getInt("tx_index"),
-						toHexString(rs.getBytes("ma_policy_id")),
-						toHexString(rs.getBytes("ma_name")),
-						rs.getLong("value"),
-						rs.getString("owning_address"),
-						null),
-				Hex.decodeHex(policyId), Hex.decodeHex(assetName));
+				(rs, rowNum) -> new LiquidityPool(
+						toHexString(rs.getBytes("policy_a")),
+						toHexString(rs.getBytes("name_a")),
+						rs.getLong("quantity_a"),
+						toHexString(rs.getBytes("policy_b")),
+						toHexString(rs.getBytes("name_b")),
+						rs.getLong("quantity_b")),
+					Hex.decodeHex(policyId), Hex.decodeHex(assetName));
 	}
 
 	public ReturnAddress getReturnAddress(String stakeAddress) {

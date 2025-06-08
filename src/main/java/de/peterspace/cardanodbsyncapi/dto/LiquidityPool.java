@@ -4,6 +4,11 @@ import lombok.Value;
 
 @Value
 public class LiquidityPool {
-	Utxo assetA;
-	Utxo assetB;
+	String policyA;
+	String nameA;
+	long quantityA;
+	
+	String policyB;
+	String nameB;
+	long quantityB;
 }
