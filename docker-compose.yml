@@ -13,6 +13,6 @@ services:
         max-file: "10"
     environment:
       - JAVA_OPTS=-Dfile.encoding=UTF-8
-networks: 
-  default: 
-    name: cardano-tools-network
+networks:
+  cardano-tools-network:
+    external: true
