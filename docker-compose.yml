@@ -12,7 +12,6 @@ services:
         max-size: "200k"
         max-file: "10"
     environment:
-      - JAVA_OPTS=-Dfile.encoding=UTF-8
       - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
       - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
