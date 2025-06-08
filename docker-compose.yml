@@ -1,0 +1,18 @@
+version: "3.5"
+
+services:
+  cardano-db-sync-api:
+    image: wutzebaer/cardano-db-sync-api:latest
+    ports:
+      - 127.0.0.1:8094:8080
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    environment:
+      - JAVA_OPTS=-Dfile.encoding=UTF-8
+networks: 
+  default: 
+    name: cardano-tools-network
