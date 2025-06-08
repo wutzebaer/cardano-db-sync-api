@@ -13,6 +13,9 @@ services:
         max-file: "10"
     environment:
       - JAVA_OPTS=-Dfile.encoding=UTF-8
+      - spring.datasource.username=$(spring.datasource.username)
+      - spring.datasource.password=$(spring.datasource.password)
+      - spring.datasource.url=$(spring.datasource.url)
 networks:
   cardano-tools-network:
     external: true
