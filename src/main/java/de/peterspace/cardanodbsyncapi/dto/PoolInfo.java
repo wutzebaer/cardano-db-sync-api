@@ -5,8 +5,6 @@ import lombok.Value;
 
 @Value
 public class PoolInfo {
-	@NotNull
-	String tickerName;
-	@NotNull
-	String poolHash;
+  @NotNull String tickerName;
+  @NotNull String poolHash;
 }

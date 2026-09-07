@@ -5,8 +5,6 @@ import lombok.Value;
 
 @Value
 public class TxOut {
-	@NotNull
-	String targetAddress;
-	@NotNull
-	long value;
+  @NotNull String targetAddress;
+  @NotNull long value;
 }

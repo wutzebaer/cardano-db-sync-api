@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>3.4.2</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
     <groupId>de.peterspace</groupId>
@@ -17,8 +17,8 @@
     <!-- mvn versions:update-properties -->
     <properties>
         <java.version>17</java.version>
-        <springdoc.version>3.1.1</springdoc.version>
-        <bucket4j-spring-boot-starter.version>0.14.0</bucket4j-spring-boot-starter.version>
+        <springdoc.version>2.8.3</springdoc.version>
+        <bucket4j-spring-boot-starter.version>0.12.8</bucket4j-spring-boot-starter.version>
         <spotless-maven-plugin.version>3.10.2</spotless-maven-plugin.version>
     </properties>
 
@@ -42,7 +42,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aspectj</artifactId>
+            <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
         <!-- cache -->
         <dependency>
