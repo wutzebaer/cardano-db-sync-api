@@ -5,8 +5,6 @@ import lombok.Value;
 
 @Value
 public class EpochStake {
-	@NotNull
-	String stakeAddress;
-	@NotNull
-	long amount;
+  @NotNull String stakeAddress;
+  @NotNull long amount;
 }

@@ -30,19 +30,11 @@
             }
         }
     },
-    "mounts": [
-        "type=volume,source=cursor-server-tradebot,target=/root/.cursor-server",
-        "type=bind,source=/mnt/c/Users/wutze/.m2,target=/home/vscode/.m2"
-    ],
     "features": {
-        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-            "version": "latest"
-        },
-        "ghcr.io/devcontainers-extra/features/mvnd-sdkman:2": {
-            "version": "latest"
-        }
+        "ghcr.io/devcontainers-extra/features/mvnd-sdkman:2": {}
     },
     "containerEnv": {
         "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
-    }
+    },
+    "postCreateCommand": "find . -name \"*.sh\" -exec chmod +x {} \\; -exec git update-index --chmod=+x {} \\; && .devcontainer/post-create.sh"
 }

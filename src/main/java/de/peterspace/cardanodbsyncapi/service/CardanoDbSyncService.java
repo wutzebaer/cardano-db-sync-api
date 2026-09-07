@@ -1,20 +1,5 @@
 package de.peterspace.cardanodbsyncapi.service;
 
-import java.math.BigDecimal;
-import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.apache.commons.codec.DecoderException;
-import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
 import de.peterspace.cardano.javalib.CardanoUtils;
 import de.peterspace.cardano.javalib.CardanoUtils.AddressType;
 import de.peterspace.cardanodbsyncapi.config.TrackExecutionTime;
@@ -31,42 +16,56 @@ import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import jakarta.annotation.PostConstruct;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
 @RequiredArgsConstructor
 public class CardanoDbSyncService {
-	private final JdbcTemplate jdbcTemplate;
-	private byte[] handlePolicyBytes;
+  private final JdbcTemplate jdbcTemplate;
+  private byte[] handlePolicyBytes;
 
-	@PostConstruct
-	public void init() throws DecoderException {
-		handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
+  @PostConstruct
+  public void init() throws DecoderException {
+    handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
 
-		// find mints of multi asset
-		log.info("Creating index idx_ma_tx_mint_ident");
-		jdbcTemplate.execute("CREATE index if not exists idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
+    // find mints of multi asset
+    log.info("Creating index idx_ma_tx_mint_ident");
+    jdbcTemplate.execute(
+        "CREATE index if not exists idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
 
-		// find multi asset by fingerprint
-		log.info("Creating index idx_multi_asset_fingerprint");
-		jdbcTemplate.execute(
-				"CREATE index if not exists idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
+    // find multi asset by fingerprint
+    log.info("Creating index idx_multi_asset_fingerprint");
+    jdbcTemplate.execute(
+        "CREATE index if not exists idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
 
-		// index for utxo view, to lookup used txos dirctly with txid and idx, not only
-		// txid
-		log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
-		jdbcTemplate.execute(
-				"CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
+    // index for utxo view, to lookup used txos dirctly with txid and idx, not only
+    // txid
+    log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
+    jdbcTemplate.execute(
+        "CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
-		log.info("Creating index tx_metadata_tx_id_key_index");
-		jdbcTemplate.execute(
-				"CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
+    log.info("Creating index tx_metadata_tx_id_key_index");
+    jdbcTemplate.execute(
+        "CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
 
-		// token owners
-		log.info("Creating materialized view ma_owners");
-		jdbcTemplate.execute("""
+    // token owners
+    log.info("Creating materialized view ma_owners");
+    jdbcTemplate.execute(
+        """
 				CREATE MATERIALIZED VIEW IF NOT exists ma_owners AS
 					select
 						coalesce(sa."view" , txo.address) address
@@ -83,14 +82,16 @@ public class CardanoDbSyncService {
 					group by ma."policy", coalesce(sa."view" , txo.address);
 					""");
 
-		log.info("Creating index ma_owners");
-		jdbcTemplate.execute("CREATE UNIQUE INDEX if not exists ma_owners ON ma_owners (address, policy);");
+    log.info("Creating index ma_owners");
+    jdbcTemplate.execute(
+        "CREATE UNIQUE INDEX if not exists ma_owners ON ma_owners (address, policy);");
 
-		log.info("Creating index idx_ma_owners_policy");
-		jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
+    log.info("Creating index idx_ma_owners_policy");
+    jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
 
-		log.info("Creating materialized view minswap_utxos");
-		jdbcTemplate.execute("""
+    log.info("Creating materialized view minswap_utxos");
+    jdbcTemplate.execute(
+        """
 					CREATE MATERIALIZED VIEW IF NOT exists minswap_pools AS
 						select
 							ma_a."policy" policy_a,
@@ -108,47 +109,49 @@ public class CardanoDbSyncService {
 							uv.payment_cred = decode('ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b', 'hex')
 				""");
 
-		log.info("Creating index minswap_utxos_idx");
-		jdbcTemplate.execute(
-				"CREATE INDEX if not exists minswap_pools_idx ON minswap_pools (policy_a, name_a);");
+    log.info("Creating index minswap_utxos_idx");
+    jdbcTemplate.execute(
+        "CREATE INDEX if not exists minswap_pools_idx ON minswap_pools (policy_a, name_a);");
 
-		log.info("Indexes created");
-	}
+    log.info("Indexes created");
+  }
 
-	@TrackExecutionTime
-	@Scheduled(cron = "0 0 0/12 * * *")
-	public void updateOwnerView() {
-		log.info("Refreshing ma_owners");
-		jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ma_owners;");
-	}
+  @TrackExecutionTime
+  @Scheduled(cron = "0 0 0/12 * * *")
+  public void updateOwnerView() {
+    log.info("Refreshing ma_owners");
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ma_owners;");
+  }
 
-	@TrackExecutionTime
-	@Scheduled(cron = "0 0 * * * *")
-	public void updateMinswapView() {
-		log.info("Refreshing minswap_utxos");
-		jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY minswap_utxos;");
-	}
+  @TrackExecutionTime
+  @Scheduled(cron = "0 0 * * * *")
+  public void updateMinswapView() {
+    log.info("Refreshing minswap_utxos");
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY minswap_utxos;");
+  }
 
-	public List<Utxo> getUtxos(String addr) throws DecoderException {
+  public List<Utxo> getUtxos(String addr) throws DecoderException {
 
-		AddressType addressType = CardanoUtils.determineAddressType(addr);
+    AddressType addressType = CardanoUtils.determineAddressType(addr);
 
-		String join;
-		String where;
-		byte[] hash;
-		if (addressType == AddressType.STAKE_ADDRESS) {
-			String stakeHash = CardanoUtils.stakeToHash(addr);
-			hash = Hex.decodeHex(stakeHash);
-			join = "join stake_address sa on sa.id=uv.stake_address_id ";
-			where = "sa.hash_raw=? ";
-		} else {
-			String paymentHash = CardanoUtils.extractPaymentHash(addr);
-			hash = Hex.decodeHex(paymentHash);
-			join = "";
-			where = "uv.payment_cred=? ";
-		}
+    String join;
+    String where;
+    byte[] hash;
+    if (addressType == AddressType.STAKE_ADDRESS) {
+      String stakeHash = CardanoUtils.stakeToHash(addr);
+      hash = Hex.decodeHex(stakeHash);
+      join = "join stake_address sa on sa.id=uv.stake_address_id ";
+      where = "sa.hash_raw=? ";
+    } else {
+      String paymentHash = CardanoUtils.extractPaymentHash(addr);
+      hash = Hex.decodeHex(paymentHash);
+      join = "";
+      where = "uv.payment_cred=? ";
+    }
 
-		String query = String.format("""
+    String query =
+        String.format(
+            """
 				select
 					tx.hash tx_hash,
 					uv."index" tx_index,
@@ -191,49 +194,59 @@ public class CardanoDbSyncService {
 				join multi_asset ma on ma.id=mto.ident
 				where
 					%s
-				""", join, where, join, where);
-		return jdbcTemplate.query(query,
-				(rs, rowNum) -> new Utxo(
-						Hex.encodeHexString(rs.getBytes("tx_hash")),
-						rs.getInt("tx_index"),
-						toHexString(rs.getBytes("ma_policy_id")),
-						toHexString(rs.getBytes("ma_name")),
-						rs.getLong("value"),
-						rs.getString("owning_address"),
-						rs.getString("source_address")),
-				hash, hash);
-	}
+				""",
+            join, where, join, where);
+    return jdbcTemplate.query(
+        query,
+        (rs, rowNum) ->
+            new Utxo(
+                Hex.encodeHexString(rs.getBytes("tx_hash")),
+                rs.getInt("tx_index"),
+                toHexString(rs.getBytes("ma_policy_id")),
+                toHexString(rs.getBytes("ma_name")),
+                rs.getLong("value"),
+                rs.getString("owning_address"),
+                rs.getString("source_address")),
+        hash,
+        hash);
+  }
 
-	public List<LiquidityPool> getMinswapPools(String policyId, String assetName) throws DecoderException {
-		String query = """
+  public List<LiquidityPool> getMinswapPools(String policyId, String assetName)
+      throws DecoderException {
+    String query =
+        """
 				select policy_a, name_a, quantity_a, policy_b, name_b, quantity_b
 				from minswap_pools
 				where policy_a=? and name_a=?
 				""";
-		return jdbcTemplate.query(query,
-				(rs, rowNum) -> new LiquidityPool(
-						toHexString(rs.getBytes("policy_a")),
-						toHexString(rs.getBytes("name_a")),
-						rs.getLong("quantity_a"),
-						toHexString(rs.getBytes("policy_b")),
-						toHexString(rs.getBytes("name_b")),
-						rs.getLong("quantity_b")),
-					Hex.decodeHex(policyId), Hex.decodeHex(assetName));
-	}
+    return jdbcTemplate.query(
+        query,
+        (rs, rowNum) ->
+            new LiquidityPool(
+                toHexString(rs.getBytes("policy_a")),
+                toHexString(rs.getBytes("name_a")),
+                rs.getLong("quantity_a"),
+                toHexString(rs.getBytes("policy_b")),
+                toHexString(rs.getBytes("name_b")),
+                rs.getLong("quantity_b")),
+        Hex.decodeHex(policyId),
+        Hex.decodeHex(assetName));
+  }
 
-	public ReturnAddress getReturnAddress(String stakeAddress) {
-		try {
-			AddressType addressType = CardanoUtils.determineAddressType(stakeAddress);
+  public ReturnAddress getReturnAddress(String stakeAddress) {
+    try {
+      AddressType addressType = CardanoUtils.determineAddressType(stakeAddress);
 
-			if (addressType == AddressType.SERVICE_ADDRESS) {
-				return new ReturnAddress(stakeAddress);
-			}
+      if (addressType == AddressType.SERVICE_ADDRESS) {
+        return new ReturnAddress(stakeAddress);
+      }
 
-			if (addressType == AddressType.SHELLY_ADDRESS) {
-				stakeAddress = getStakeAddress(stakeAddress).getAddress();
-			}
+      if (addressType == AddressType.SHELLY_ADDRESS) {
+        stakeAddress = getStakeAddress(stakeAddress).getAddress();
+      }
 
-			return jdbcTemplate.queryForObject("""
+      return jdbcTemplate.queryForObject(
+          """
 					select txo.address
 					from stake_address sa
 					join tx_out txo on txo.stake_address_id=sa.id
@@ -241,85 +254,94 @@ public class CardanoDbSyncService {
 					order by txo.id
 					limit 1
 					""",
-					(rs, rowNum) -> new ReturnAddress(rs.getString("address")), stakeAddress);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new ReturnAddress(rs.getString("address")),
+          stakeAddress);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public StakeAddress getStakeAddress(String address) {
-		try {
-			return jdbcTemplate.queryForObject("""
+  public StakeAddress getStakeAddress(String address) {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 					select sa."view" stakeAddress from
 					tx_out txo
 					join stake_address sa on sa.id=txo.stake_address_id
 					where txo.address=?
 					limit 1
 					""",
-					(rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")), address);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")),
+          address);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public StakeAddress getStakeAddressByHash(String stakeAddressHash) throws DataAccessException, DecoderException {
-		try {
-			return jdbcTemplate.queryForObject("""
+  public StakeAddress getStakeAddressByHash(String stakeAddressHash)
+      throws DataAccessException, DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 					select view stakeAddress from stake_address sa where sa.hash_raw=?;
 					""",
-					(rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")), Hex.decodeHex(stakeAddressHash));
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")),
+          Hex.decodeHex(stakeAddressHash));
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public StakeAddress getStakeHashByAddress(String stakeAddress) throws DataAccessException, DecoderException {
-		try {
-			return jdbcTemplate.queryForObject("""
+  public StakeAddress getStakeHashByAddress(String stakeAddress)
+      throws DataAccessException, DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 					select hash_raw hash from stake_address sa where sa.view=?;
 					""",
-					(rs, rowNum) -> new StakeAddress(Hex.encodeHexString(rs.getBytes("hash"))), stakeAddress);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new StakeAddress(Hex.encodeHexString(rs.getBytes("hash"))),
+          stakeAddress);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter)
-			throws DecoderException {
+  public List<TokenListItem> getTokenList(Long afterMintid, Long beforeMintid, String filter)
+      throws DecoderException {
 
-		List<String> filters = new ArrayList<String>();
-		List<Object> filterParams = new ArrayList<Object>();
+    List<String> filters = new ArrayList<String>();
+    List<Object> filterParams = new ArrayList<Object>();
 
-		if (afterMintid != null) {
-			filters.add("and ma_mint_id > ?");
-			filterParams.add(afterMintid);
-		}
+    if (afterMintid != null) {
+      filters.add("and ma_mint_id > ?");
+      filterParams.add(afterMintid);
+    }
 
-		if (beforeMintid != null) {
-			filters.add("and ma_mint_id < ?");
-			filterParams.add(beforeMintid);
-		}
+    if (beforeMintid != null) {
+      filters.add("and ma_mint_id < ?");
+      filterParams.add(beforeMintid);
+    }
 
-		if (!StringUtils.isBlank(filter)) {
-			filter = filter.trim();
-			String[] bits = filter.split("\\.");
-			if (bits.length == 2 && bits[0].length() == 56) {
-				filters.add("and ma_policy_id=? and ma_name=?");
-				filterParams.add(Hex.decodeHex(bits[0]));
-				filterParams.add(Hex.decodeHex(bits[1]));
-			} else if (bits.length == 1 && bits[0].length() == 56) {
-				filters.add("and ma_policy_id=?");
-				filterParams.add(Hex.decodeHex(bits[0]));
-			} else if (bits[0].length() == 44 && bits[0].startsWith("asset")) {
-				filters.add("and ma_fingerprint=?");
-				filterParams.add(bits[0]);
-			} else {
-				return List.of();
-			}
-		}
+    if (!StringUtils.isBlank(filter)) {
+      filter = filter.trim();
+      String[] bits = filter.split("\\.");
+      if (bits.length == 2 && bits[0].length() == 56) {
+        filters.add("and ma_policy_id=? and ma_name=?");
+        filterParams.add(Hex.decodeHex(bits[0]));
+        filterParams.add(Hex.decodeHex(bits[1]));
+      } else if (bits.length == 1 && bits[0].length() == 56) {
+        filters.add("and ma_policy_id=?");
+        filterParams.add(Hex.decodeHex(bits[0]));
+      } else if (bits[0].length() == 44 && bits[0].startsWith("asset")) {
+        filters.add("and ma_fingerprint=?");
+        filterParams.add(bits[0]);
+      } else {
+        return List.of();
+      }
+    }
 
-		return jdbcTemplate.query(
-				"""
+    return jdbcTemplate.query(
+        """
 						select
 							ma_mint_id
 							,slot_no
@@ -350,37 +372,43 @@ public class CardanoDbSyncService {
 							) sub
 						where
 						"""
-						+ (StringUtils.isBlank(filter) ? "metadata is not null" : "true") + " " + """
-								""" + StringUtils.join(filters, " ") + """
+            + (StringUtils.isBlank(filter) ? "metadata is not null" : "true")
+            + " "
+            + """
+								"""
+            + StringUtils.join(filters, " ")
+            + """
 								order by ma_mint_id desc
 								limit 100
 								""",
-				(rs, rowNum) -> new TokenListItem(
-						rs.getLong("ma_mint_id"),
-						rs.getLong("slot_no"),
-						toHexString(rs.getBytes("ma_policy_id")),
-						toHexString(rs.getBytes("ma_name")),
-						rs.getString("ma_fingerprint"),
-						rs.getLong("quantity"),
-						rs.getString("name"),
-						rs.getString("image")),
-				filterParams.toArray());
-	}
+        (rs, rowNum) ->
+            new TokenListItem(
+                rs.getLong("ma_mint_id"),
+                rs.getLong("slot_no"),
+                toHexString(rs.getBytes("ma_policy_id")),
+                toHexString(rs.getBytes("ma_name")),
+                rs.getString("ma_fingerprint"),
+                rs.getLong("quantity"),
+                rs.getString("name"),
+                rs.getString("image")),
+        filterParams.toArray());
+  }
 
-	public List<TokenListItem> getAddressTokenList(String addr) throws DecoderException {
+  public List<TokenListItem> getAddressTokenList(String addr) throws DecoderException {
 
-		String join;
-		String where;
-		if (addr.startsWith("stake")) {
-			join = "join stake_address sa on sa.id=uv.stake_address_id ";
-			where = "sa.\"view\"=? ";
-		} else {
-			join = "";
-			where = "uv.address=? ";
-		}
+    String join;
+    String where;
+    if (addr.startsWith("stake")) {
+      join = "join stake_address sa on sa.id=uv.stake_address_id ";
+      where = "sa.\"view\"=? ";
+    } else {
+      join = "";
+      where = "uv.address=? ";
+    }
 
-		String query = String.format(
-				"""
+    String query =
+        String.format(
+            """
 						select
 							ma_policy_id
 							,ma_name
@@ -415,31 +443,34 @@ public class CardanoDbSyncService {
 								order by max(uv.id) desc
 								) sub
 						""",
-				join, where);
-		return jdbcTemplate.query(query,
-				(rs, rowNum) -> new TokenListItem(
-						null,
-						null,
-						toHexString(rs.getBytes("ma_policy_id")),
-						toHexString(rs.getBytes("ma_name")),
-						rs.getString("ma_fingerprint"),
-						rs.getLong("quantity"),
-						rs.getString("name"),
-						rs.getString("image")),
-				addr);
-	}
+            join, where);
+    return jdbcTemplate.query(
+        query,
+        (rs, rowNum) ->
+            new TokenListItem(
+                null,
+                null,
+                toHexString(rs.getBytes("ma_policy_id")),
+                toHexString(rs.getBytes("ma_name")),
+                rs.getString("ma_fingerprint"),
+                rs.getLong("quantity"),
+                rs.getString("name"),
+                rs.getString("image")),
+        addr);
+  }
 
-	public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {
-		return getTokenDetails(policyId, assetName, null);
-	}
+  public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {
+    return getTokenDetails(policyId, assetName, null);
+  }
 
-	public TokenDetails getTokenDetails(String fingerprint) throws DecoderException {
-		return getTokenDetails(null, null, fingerprint);
-	}
+  public TokenDetails getTokenDetails(String fingerprint) throws DecoderException {
+    return getTokenDetails(null, null, fingerprint);
+  }
 
-	private TokenDetails getTokenDetails(String policyId, String assetName, String fingerprint)
-			throws DecoderException {
-		String query = """
+  private TokenDetails getTokenDetails(String policyId, String assetName, String fingerprint)
+      throws DecoderException {
+    String query =
+        """
 				select
 					b.slot_no
 					,ma."policy" ma_policy_id
@@ -461,41 +492,44 @@ public class CardanoDbSyncService {
 				order by mtm.id desc
 				limit 1
 				""";
-		String whereClause;
-		Object[] params;
+    String whereClause;
+    Object[] params;
 
-		if (policyId != null && assetName != null) {
-			whereClause = "ma.\"policy\"=? and ma.\"name\"=?";
-			params = new Object[] { Hex.decodeHex(policyId), Hex.decodeHex(StringUtils.trimToEmpty(assetName)) };
-		} else if (fingerprint != null) {
-			whereClause = "ma.\"fingerprint\"=?";
-			params = new Object[] { fingerprint };
-		} else {
-			throw new IllegalArgumentException("Either policyId and assetName or fingerprint must be provided");
-		}
+    if (policyId != null && assetName != null) {
+      whereClause = "ma.\"policy\"=? and ma.\"name\"=?";
+      params =
+          new Object[] {Hex.decodeHex(policyId), Hex.decodeHex(StringUtils.trimToEmpty(assetName))};
+    } else if (fingerprint != null) {
+      whereClause = "ma.\"fingerprint\"=?";
+      params = new Object[] {fingerprint};
+    } else {
+      throw new IllegalArgumentException(
+          "Either policyId and assetName or fingerprint must be provided");
+    }
 
-		try {
-			return jdbcTemplate.queryForObject(
-					String.format(query, whereClause),
-					(rs, rowNum) -> new TokenDetails(
-							rs.getLong("slot_no"),
-							toHexString(rs.getBytes("ma_policy_id")),
-							toHexString(rs.getBytes("ma_name")),
-							rs.getString("fingerprint"),
-							rs.getString("metadata"),
-							rs.getString("ma_policy_script"),
-							toHexString(rs.getBytes("tx_hash")),
-							rs.getLong("total_supply")),
-					params);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+    try {
+      return jdbcTemplate.queryForObject(
+          String.format(query, whereClause),
+          (rs, rowNum) ->
+              new TokenDetails(
+                  rs.getLong("slot_no"),
+                  toHexString(rs.getBytes("ma_policy_id")),
+                  toHexString(rs.getBytes("ma_name")),
+                  rs.getString("fingerprint"),
+                  rs.getString("metadata"),
+                  rs.getString("ma_policy_script"),
+                  toHexString(rs.getBytes("tx_hash")),
+                  rs.getLong("total_supply")),
+          params);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public StakeInfo getStakeInfo(String stakeAddress) {
-		try {
-			return jdbcTemplate.queryForObject(
-					"""
+  public StakeInfo getStakeInfo(String stakeAddress) {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 							select
 								(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
 								,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
@@ -507,31 +541,32 @@ public class CardanoDbSyncService {
 							order by d.id desc
 							limit 1
 							""",
-					(rs, rowNum) -> new StakeInfo(
-							rs.getLong("stake"),
-							rs.getString("pool_hash"),
-							rs.getString("ticker_name"),
-							rs.getLong("total_stake")),
-					stakeAddress);
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) ->
+              new StakeInfo(
+                  rs.getLong("stake"),
+                  rs.getString("pool_hash"),
+                  rs.getString("ticker_name"),
+                  rs.getLong("total_stake")),
+          stakeAddress);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public List<PoolInfo> getPoolList() {
-		return jdbcTemplate.query("""
+  public List<PoolInfo> getPoolList() {
+    return jdbcTemplate.query(
+        """
 				select distinct pod.ticker_name, ph."view" pool_hash
 				from off_chain_pool_data pod
 				join pool_hash ph on ph.id=pod.pool_id
 				order by pod.ticker_name
 				""",
-				(rs, rowNum) -> new PoolInfo(
-						rs.getString("ticker_name"),
-						rs.getString("pool_hash")));
-	}
+        (rs, rowNum) -> new PoolInfo(rs.getString("ticker_name"), rs.getString("pool_hash")));
+  }
 
-	public List<EpochStake> getEpochStake(String poolHash, int epoch) {
-		return jdbcTemplate.query("""
+  public List<EpochStake> getEpochStake(String poolHash, int epoch) {
+    return jdbcTemplate.query(
+        """
 				select
 					sa."view" stake_address,
 					es.amount
@@ -542,33 +577,32 @@ public class CardanoDbSyncService {
 				ph.view=?
 				and epoch_no=?
 				""",
-				(rs, rowNum) -> new EpochStake(
-						rs.getString("stake_address"),
-						rs.getLong("amount")),
-				poolHash, epoch);
-	}
+        (rs, rowNum) -> new EpochStake(rs.getString("stake_address"), rs.getLong("amount")),
+        poolHash,
+        epoch);
+  }
 
-	public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
-		return jdbcTemplate.query("""
+  public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
+    return jdbcTemplate.query(
+        """
 					select * from ma_owners mo where mo.policy=?
 				""",
-				(rs, rowNum) -> {
-					List<String> maNames = new ArrayList<>();
-					ResultSet maNamesRs = rs.getArray("maNames").getResultSet();
-					while (maNamesRs.next()) {
-						maNames.add(maNamesRs.getString(2));
-					}
-					OwnerInfo ownerInfo = new OwnerInfo(
-							rs.getString("address"),
-							rs.getLong("quantity"),
-							maNames);
-					return ownerInfo;
-				},
-				Hex.decodeHex(policyId));
-	}
+        (rs, rowNum) -> {
+          List<String> maNames = new ArrayList<>();
+          ResultSet maNamesRs = rs.getArray("maNames").getResultSet();
+          while (maNamesRs.next()) {
+            maNames.add(maNamesRs.getString(2));
+          }
+          OwnerInfo ownerInfo =
+              new OwnerInfo(rs.getString("address"), rs.getLong("quantity"), maNames);
+          return ownerInfo;
+        },
+        Hex.decodeHex(policyId));
+  }
 
-	public List<StakeAddress> getHandles(String stakeAddress) throws DecoderException {
-		return jdbcTemplate.query("""
+  public List<StakeAddress> getHandles(String stakeAddress) throws DecoderException {
+    return jdbcTemplate.query(
+        """
 					select ma.name assetName
 					from stake_address sa
 					join utxo_view uv on uv.stake_address_id=sa.id
@@ -577,73 +611,80 @@ public class CardanoDbSyncService {
 					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
 					where sa.view=?
 				""",
-				(rs, rowNum) -> new StakeAddress(new String(rs.getBytes("assetName"))),
-				handlePolicyBytes, stakeAddress);
-	}
+        (rs, rowNum) -> new StakeAddress(new String(rs.getBytes("assetName"))),
+        handlePolicyBytes,
+        stakeAddress);
+  }
 
-	public StakeAddress getAddressByHandle(String handle) throws DecoderException {
-		try {
-			return jdbcTemplate.queryForObject("""
+  public StakeAddress getAddressByHandle(String handle) throws DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 					select address from ma_owners mo
 					where
 					mo."policy"=?
 					and ?=ANY(mo.manames)
 					""",
-					(rs, rowNum) -> new StakeAddress(rs.getString("address")),
-					handlePolicyBytes, Hex.encodeHexString(handle.getBytes()));
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new StakeAddress(rs.getString("address")),
+          handlePolicyBytes,
+          Hex.encodeHexString(handle.getBytes()));
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public String getTransactionMetadata(String txId) throws DecoderException {
-		try {
-			return jdbcTemplate.queryForObject("""
+  public String getTransactionMetadata(String txId) throws DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
 					select tm."json"
 					from tx t
 					join tx_metadata tm on tm.tx_id=t.id
 					where t.hash=?
 					""",
-					(rs, rowNum) -> rs.getString(1), Hex.decodeHex(txId));
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> rs.getString(1),
+          Hex.decodeHex(txId));
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public List<TxOut> getTransactionOutputs(String txId) throws DecoderException {
-		try {
-			return jdbcTemplate.query("""
+  public List<TxOut> getTransactionOutputs(String txId) throws DecoderException {
+    try {
+      return jdbcTemplate.query(
+          """
 					select txo.address, txo.value
 					from tx t
 					join tx_out txo on txo.tx_id=t.id
 					where t.hash=?
 					""",
-					(rs, rowNum) -> new TxOut(
-							rs.getString("address"),
-							rs.getLong("value")),
-					Hex.decodeHex(txId));
-		} catch (EmptyResultDataAccessException e) {
-			return null;
-		}
-	}
+          (rs, rowNum) -> new TxOut(rs.getString("address"), rs.getLong("value")),
+          Hex.decodeHex(txId));
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
 
-	public Boolean isTransactionConfirmed(String txId) throws DataAccessException, DecoderException {
-		return jdbcTemplate.queryForObject("""
+  public Boolean isTransactionConfirmed(String txId) throws DataAccessException, DecoderException {
+    return jdbcTemplate.queryForObject(
+        """
 				select count(*) from tx where hash=?
 				""",
-				(rs, rowNum) -> rs.getBoolean(1), Hex.decodeHex(txId));
-	}
+        (rs, rowNum) -> rs.getBoolean(1),
+        Hex.decodeHex(txId));
+  }
 
-	public Long getTip() {
-		return jdbcTemplate.queryForObject("""
+  public Long getTip() {
+    return jdbcTemplate.queryForObject(
+        """
 				select max(slot_no) from block
 				""",
-				(rs, rowNum) -> rs.getLong(1));
-	}
+        (rs, rowNum) -> rs.getLong(1));
+  }
 
-	public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
-		return jdbcTemplate.query(
-				"""
+  public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
+    return jdbcTemplate.query(
+        """
 							with lastTransaction as (
 								select t2.hash
 								from ma_tx_mint mtm
@@ -673,35 +714,40 @@ public class CardanoDbSyncService {
 							where tx.hash=(select hash from lastTransaction)
 							order by ma.id desc
 						""",
-				(rs, rowNum) -> new TokenDetails(
-						rs.getLong("slot_no"),
-						toHexString(rs.getBytes("ma_policy_id")),
-						toHexString(rs.getBytes("ma_name")),
-						rs.getString("fingerprint"),
-						rs.getString("metadata"),
-						rs.getString("ma_policy_script"),
-						toHexString(rs.getBytes("tx_hash")),
-						rs.getLong("total_supply")),
-				stakeAddress, policyIds.stream().map(policyId -> {
-					try {
-						return Hex.decodeHex(policyId);
-					} catch (DecoderException e) {
-						throw new RuntimeException(e);
-					}
-				}).toArray(byte[][]::new));
-	}
+        (rs, rowNum) ->
+            new TokenDetails(
+                rs.getLong("slot_no"),
+                toHexString(rs.getBytes("ma_policy_id")),
+                toHexString(rs.getBytes("ma_name")),
+                rs.getString("fingerprint"),
+                rs.getString("metadata"),
+                rs.getString("ma_policy_script"),
+                toHexString(rs.getBytes("tx_hash")),
+                rs.getLong("total_supply")),
+        stakeAddress,
+        policyIds.stream()
+            .map(
+                policyId -> {
+                  try {
+                    return Hex.decodeHex(policyId);
+                  } catch (DecoderException e) {
+                    throw new RuntimeException(e);
+                  }
+                })
+            .toArray(byte[][]::new));
+  }
 
-	public List<AccountStatementRow> getStatement(String address) {
-		if (address.startsWith("stake")) {
-			return accountStatement(address);
-		} else {
-			return addressStatement(address);
-		}
-	}
+  public List<AccountStatementRow> getStatement(String address) {
+    if (address.startsWith("stake")) {
+      return accountStatement(address);
+    } else {
+      return addressStatement(address);
+    }
+  }
 
-	private List<AccountStatementRow> addressStatement(String address) {
-		return jdbcTemplate.query(
-				"""
+  private List<AccountStatementRow> addressStatement(String address) {
+    return jdbcTemplate.query(
+        """
 						select
 							"time" "timestamp",
 							min("epoch_no") epoch,
@@ -750,13 +796,14 @@ public class CardanoDbSyncService {
 						group by "timestamp", txId
 						order by "timestamp" desc, txId desc
 						""",
-				accountStatementRowMapper,
-				address, address);
-	}
+        accountStatementRowMapper,
+        address,
+        address);
+  }
 
-	private List<AccountStatementRow> accountStatement(String stakeAddress) {
-		return jdbcTemplate.query(
-				"""
+  private List<AccountStatementRow> accountStatement(String stakeAddress) {
+    return jdbcTemplate.query(
+        """
 						select
 							"time" "timestamp",
 							min("epoch_no") epoch,
@@ -839,24 +886,28 @@ public class CardanoDbSyncService {
 						group by "timestamp", txId
 						order by "timestamp" desc, txId desc
 						""",
-				accountStatementRowMapper,
-				stakeAddress, stakeAddress, stakeAddress, stakeAddress);
-	}
+        accountStatementRowMapper,
+        stakeAddress,
+        stakeAddress,
+        stakeAddress,
+        stakeAddress);
+  }
 
-	private RowMapper<AccountStatementRow> accountStatementRowMapper = (result, rowNum) -> new AccountStatementRow(
-			result.getTimestamp("timestamp"),
-			result.getInt("epoch"),
-			result.getString("tx_hash"),
-			result.getLong("withdrawn"),
-			result.getLong("rewards"),
-			result.getLong("OUT"),
-			result.getLong("IN"),
-			result.getLong("change"),
-			result.getLong("sum"),
-			result.getString("operations").split(","));
+  private RowMapper<AccountStatementRow> accountStatementRowMapper =
+      (result, rowNum) ->
+          new AccountStatementRow(
+              result.getTimestamp("timestamp"),
+              result.getInt("epoch"),
+              result.getString("tx_hash"),
+              result.getLong("withdrawn"),
+              result.getLong("rewards"),
+              result.getLong("OUT"),
+              result.getLong("IN"),
+              result.getLong("change"),
+              result.getLong("sum"),
+              result.getString("operations").split(","));
 
-	private String toHexString(byte[] bytes) {
-		return bytes == null ? null : Hex.encodeHexString(bytes);
-	}
-
+  private String toHexString(byte[] bytes) {
+    return bytes == null ? null : Hex.encodeHexString(bytes);
+  }
 }

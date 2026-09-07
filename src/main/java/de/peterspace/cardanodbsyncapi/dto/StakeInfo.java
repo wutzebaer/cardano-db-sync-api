@@ -5,12 +5,8 @@ import lombok.Value;
 
 @Value
 public class StakeInfo {
-	@NotNull
-	long stake;
-	@NotNull
-	String poolHash;
-	@NotNull
-	String tickerName;
-	@NotNull
-	long totalStake;
+  @NotNull long stake;
+  @NotNull String poolHash;
+  @NotNull String tickerName;
+  @NotNull long totalStake;
 }
