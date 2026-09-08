@@ -1,0 +1,14 @@
+spring:
+  cache:
+    jcache:
+      config: classpath:ehcache.xml
+  task:
+    scheduling:
+      enabled: false
+  datasource:
+    url: jdbc:postgresql://host.docker.internal:7001/cardanochain
+    username: peter
+    password: ""
+
+bucket4j:
+  enabled: false

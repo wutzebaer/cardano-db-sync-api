@@ -42,31 +42,42 @@ public class CardanoDbSyncService {
   public void init() throws DecoderException {
     handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
 
-    // find mints of multi asset
     log.info("Creating index ct_idx_ma_tx_mint_ident");
     jdbcTemplate.execute(
-        "CREATE index if not exists ct_idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
+        "CREATE INDEX IF NOT EXISTS ct_idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
 
-    // find multi asset by fingerprint
     log.info("Creating index ct_idx_multi_asset_fingerprint");
     jdbcTemplate.execute(
-        "CREATE index if not exists ct_idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
-
-    // index for utxo view, to lookup used txos dirctly with txid and idx, not only
-    // txid
-    log.info("Creating index ct_idx_tx_in_tx_out_id_tx_out_index");
-    jdbcTemplate.execute(
-        "CREATE INDEX if not exists ct_idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
+        "CREATE INDEX IF NOT EXISTS ct_idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
 
     log.info("Creating index ct_tx_metadata_tx_id_key_index");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists ct_tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
+        "CREATE INDEX IF NOT EXISTS ct_tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
 
-    // token owners
-    log.info("Creating materialized view ct_ma_owners");
+    log.info("Creating index ct_idx_tx_out_unspent_payment_cred");
     jdbcTemplate.execute(
-        """
-				CREATE MATERIALIZED VIEW IF NOT exists ct_ma_owners AS
+        "CREATE INDEX IF NOT EXISTS ct_idx_tx_out_unspent_payment_cred ON tx_out (payment_cred) WHERE consumed_by_tx_id IS NULL;");
+
+    log.info("Creating index ct_idx_tx_out_unspent_stake_address_id");
+    jdbcTemplate.execute(
+        "CREATE INDEX IF NOT EXISTS ct_idx_tx_out_unspent_stake_address_id ON tx_out (stake_address_id) WHERE consumed_by_tx_id IS NULL;");
+
+    log.info("Creating index ct_idx_ma_tx_out_ident");
+    jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS ct_idx_ma_tx_out_ident ON ma_tx_out (ident);");
+
+    log.info("Creating index ct_idx_epoch_stake_pool_id_epoch_no");
+    jdbcTemplate.execute(
+        "CREATE INDEX IF NOT EXISTS ct_idx_epoch_stake_pool_id_epoch_no ON epoch_stake (pool_id, epoch_no);");
+
+    log.info("Creating index ct_idx_pool_hash_view");
+    jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS ct_idx_pool_hash_view ON pool_hash (view);");
+
+    log.info("Creating materialized view ct_ma_owners");
+    if (materializedViewNeedsRebuild("ct_ma_owners")) {
+      jdbcTemplate.execute("DROP MATERIALIZED VIEW IF EXISTS ct_ma_owners CASCADE;");
+      jdbcTemplate.execute(
+          """
+					CREATE MATERIALIZED VIEW ct_ma_owners AS
 					select
 						coalesce(sa."view" , txo.address) address
 						,sum(mto.quantity) quantity
@@ -75,60 +86,83 @@ public class CardanoDbSyncService {
 					from multi_asset ma
 					join ma_tx_out mto on ma.id=mto.ident
 					join tx_out txo on txo.id=mto.tx_out_id
-					left join tx_in ti on ti.tx_out_id=txo.tx_id and ti.tx_out_index=txo."index"
 					left join stake_address sa on sa.id=txo.stake_address_id
 					where
-					ti.id is null
-					group by ma."policy", coalesce(sa."view" , txo.address);
+					txo.consumed_by_tx_id is null
+					group by ma."policy", coalesce(sa."view" , txo.address)
+					WITH NO DATA;
 					""");
+    }
 
     log.info("Creating index ct_ma_owners_address_policy");
     jdbcTemplate.execute(
-        "CREATE UNIQUE INDEX if not exists ct_ma_owners_address_policy ON ct_ma_owners (address, policy);");
+        "CREATE UNIQUE INDEX IF NOT EXISTS ct_ma_owners_address_policy ON ct_ma_owners (address, policy);");
 
     log.info("Creating index ct_idx_ma_owners_policy");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists ct_idx_ma_owners_policy ON ct_ma_owners (policy);");
+        "CREATE INDEX IF NOT EXISTS ct_idx_ma_owners_policy ON ct_ma_owners (policy);");
 
     log.info("Creating materialized view ct_minswap_pools");
-    jdbcTemplate.execute(
-        """
-					CREATE MATERIALIZED VIEW IF NOT exists ct_minswap_pools AS
+    if (materializedViewNeedsRebuild("ct_minswap_pools")) {
+      jdbcTemplate.execute("DROP MATERIALIZED VIEW IF EXISTS ct_minswap_pools CASCADE;");
+      jdbcTemplate.execute(
+          """
+					CREATE MATERIALIZED VIEW ct_minswap_pools AS
 						select
 							ma_a."policy" policy_a,
 							ma_a."name" name_a,
 							mto_a.quantity quantity_a,
 							ma_b."policy" policy_b,
 							ma_b."name" name_b,
-							coalesce(mto_b.quantity, uv.value) quantity_b
-						from utxo_view uv
-						join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+							coalesce(mto_b.quantity, txo.value) quantity_b
+						from tx_out txo
 						join ma_tx_out mto_a on mto_a.tx_out_id=txo.id
 						join multi_asset ma_a on ma_a.id=mto_a.ident and ma_a."policy" != decode('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c', 'hex')
 						left join (ma_tx_out mto_b join multi_asset ma_b on ma_b.id = mto_b.ident and ma_b."policy" != decode('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c', 'hex')) on mto_b.tx_out_id = txo.id and mto_b.id != mto_a.id
 						where
-							uv.payment_cred = decode('ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b', 'hex')
+							txo.consumed_by_tx_id is null
+							and txo.payment_cred = decode('ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b', 'hex')
+					WITH NO DATA;
 				""");
+    }
 
     log.info("Creating index ct_minswap_pools_idx");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists ct_minswap_pools_idx ON ct_minswap_pools (policy_a, name_a);");
+        "CREATE INDEX IF NOT EXISTS ct_minswap_pools_idx ON ct_minswap_pools (policy_a, name_a);");
 
     log.info("Indexes created");
+  }
+
+  private boolean materializedViewNeedsRebuild(String viewName) {
+    try {
+      String def =
+          jdbcTemplate.queryForObject(
+              "select pg_get_viewdef(to_regclass('public.' || ?), true)", String.class, viewName);
+      return def == null || !def.contains("consumed_by_tx_id");
+    } catch (DataAccessException e) {
+      return true;
+    }
   }
 
   @TrackExecutionTime
   @Scheduled(cron = "0 0 0/12 * * *")
   public void updateOwnerView() {
-    log.info("Refreshing ct_ma_owners");
-    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ct_ma_owners;");
+    refreshMaterializedView("ct_ma_owners");
   }
 
   @TrackExecutionTime
   @Scheduled(cron = "0 0 * * * *")
   public void updateMinswapView() {
-    log.info("Refreshing ct_minswap_pools");
-    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ct_minswap_pools;");
+    refreshMaterializedView("ct_minswap_pools");
+  }
+
+  private void refreshMaterializedView(String viewName) {
+    log.info("Refreshing {}", viewName);
+    if (isMaterializedViewPopulated(viewName)) {
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY " + viewName);
+    } else {
+      jdbcTemplate.execute("REFRESH MATERIALIZED VIEW " + viewName);
+    }
   }
 
   public List<Utxo> getUtxos(String addr) throws DecoderException {
@@ -141,13 +175,13 @@ public class CardanoDbSyncService {
     if (addressType == AddressType.STAKE_ADDRESS) {
       String stakeHash = CardanoUtils.stakeToHash(addr);
       hash = Hex.decodeHex(stakeHash);
-      join = "join stake_address sa on sa.id=uv.stake_address_id ";
+      join = "join stake_address sa on sa.id=txo.stake_address_id ";
       where = "sa.hash_raw=? ";
     } else {
       String paymentHash = CardanoUtils.extractPaymentHash(addr);
       hash = Hex.decodeHex(paymentHash);
       join = "";
-      where = "uv.payment_cred=? ";
+      where = "txo.payment_cred=? ";
     }
 
     String query =
@@ -155,46 +189,45 @@ public class CardanoDbSyncService {
             """
 				select
 					tx.hash tx_hash,
-					uv."index" tx_index,
+					txo."index" tx_index,
 					null ma_policy_id,
 					null ma_name,
-					uv.value,
-					uv.address owning_address,
+					txo.value,
+					txo.address owning_address,
 					(
-						select txo.address
-						from tx_in ti
-						join tx_out txo on txo.tx_id = ti.tx_out_id and txo."index" = ti.tx_out_index
-						where ti.tx_in_id = uv.tx_id
+						select src.address
+						from tx_out src
+						where src.consumed_by_tx_id = txo.tx_id
 						limit 1
 					) source_address
-				from utxo_view uv
+				from tx_out txo
 				%s
-				join tx on tx.id = uv.tx_id
+				join tx on tx.id = txo.tx_id
 				where
-					%s
+					txo.consumed_by_tx_id is null
+					and %s
 				union
 				select
 					tx.hash,
-					uv."index",
+					txo."index",
 					ma."policy",
 					ma."name",
 					mto.quantity,
-					uv.address owning_address,
+					txo.address owning_address,
 					(
-						select txo.address
-						from tx_in ti
-						join tx_out txo on txo.tx_id = ti.tx_out_id and txo."index" = ti.tx_out_index
-						where ti.tx_in_id = uv.tx_id
+						select src.address
+						from tx_out src
+						where src.consumed_by_tx_id = txo.tx_id
 						limit 1
 					) source_address
-				from utxo_view uv
+				from tx_out txo
 				%s
-				join tx on tx.id = uv.tx_id
-				join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
+				join tx on tx.id = txo.tx_id
 				join ma_tx_out mto on mto.tx_out_id=txo.id
 				join multi_asset ma on ma.id=mto.ident
 				where
-					%s
+					txo.consumed_by_tx_id is null
+					and %s
 				""",
             join, where, join, where);
     return jdbcTemplate.query(
@@ -214,6 +247,9 @@ public class CardanoDbSyncService {
 
   public List<LiquidityPool> getMinswapPools(String policyId, String assetName)
       throws DecoderException {
+    if (!isMaterializedViewPopulated("ct_minswap_pools")) {
+      return List.of();
+    }
     String query =
         """
 				select policy_a, name_a, quantity_a, policy_b, name_b, quantity_b
@@ -264,17 +300,19 @@ public class CardanoDbSyncService {
 
   public StakeAddress getStakeAddress(String address) {
     try {
+      byte[] paymentCred = Hex.decodeHex(CardanoUtils.extractPaymentHash(address));
       return jdbcTemplate.queryForObject(
           """
 					select sa."view" stakeAddress from
 					tx_out txo
 					join stake_address sa on sa.id=txo.stake_address_id
-					where txo.address=?
+					where txo.payment_cred=? and txo.address=?
 					limit 1
 					""",
           (rs, rowNum) -> new StakeAddress(rs.getString("stakeAddress")),
+          paymentCred,
           address);
-    } catch (EmptyResultDataAccessException e) {
+    } catch (EmptyResultDataAccessException | DecoderException e) {
       return null;
     }
   }
@@ -313,33 +351,38 @@ public class CardanoDbSyncService {
     List<String> filters = new ArrayList<String>();
     List<Object> filterParams = new ArrayList<Object>();
 
-    if (afterMintid != null) {
-      filters.add("and ma_mint_id > ?");
-      filterParams.add(afterMintid);
-    }
-
-    if (beforeMintid != null) {
-      filters.add("and ma_mint_id < ?");
-      filterParams.add(beforeMintid);
-    }
-
     if (!StringUtils.isBlank(filter)) {
       filter = filter.trim();
       String[] bits = filter.split("\\.");
       if (bits.length == 2 && bits[0].length() == 56) {
-        filters.add("and ma_policy_id=? and ma_name=?");
+        filters.add("and ma.\"policy\"=? and ma.name=?");
         filterParams.add(Hex.decodeHex(bits[0]));
         filterParams.add(Hex.decodeHex(bits[1]));
       } else if (bits.length == 1 && bits[0].length() == 56) {
-        filters.add("and ma_policy_id=?");
+        filters.add("and ma.\"policy\"=?");
         filterParams.add(Hex.decodeHex(bits[0]));
       } else if (bits[0].length() == 44 && bits[0].startsWith("asset")) {
-        filters.add("and ma_fingerprint=?");
+        filters.add("and ma.fingerprint=?");
         filterParams.add(bits[0]);
       } else {
         return List.of();
       }
     }
+
+    if (afterMintid != null) {
+      filters.add("and mtm.id > ?");
+      filterParams.add(afterMintid);
+    }
+
+    if (beforeMintid != null) {
+      filters.add("and mtm.id < ?");
+      filterParams.add(beforeMintid);
+    }
+
+    String metadataFilter =
+        StringUtils.isBlank(filter)
+            ? "and coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex')) is not null "
+            : "";
 
     return jdbcTemplate.query(
         """
@@ -370,18 +413,17 @@ public class CardanoDbSyncService {
 							join tx on tx.id = mtm.tx_id
 							join block b on b.id = tx.block_id
 							left join tx_metadata tm on tm.tx_id = tx.id and tm.key=721
-							) sub
-						where
-						"""
-            + (StringUtils.isBlank(filter) ? "metadata is not null" : "true")
+							where true
+							"""
+            + metadataFilter
             + " "
-            + """
-								"""
             + StringUtils.join(filters, " ")
             + """
-								order by ma_mint_id desc
-								limit 100
-								""",
+							
+							order by mtm.id desc
+							limit 100
+							) sub
+							""",
         (rs, rowNum) ->
             new TokenListItem(
                 rs.getLong("ma_mint_id"),
@@ -397,14 +439,19 @@ public class CardanoDbSyncService {
 
   public List<TokenListItem> getAddressTokenList(String addr) throws DecoderException {
 
+    AddressType addressType = CardanoUtils.determineAddressType(addr);
+
     String join;
     String where;
-    if (addr.startsWith("stake")) {
-      join = "join stake_address sa on sa.id=uv.stake_address_id ";
-      where = "sa.\"view\"=? ";
+    byte[] hash;
+    if (addressType == AddressType.STAKE_ADDRESS) {
+      hash = Hex.decodeHex(CardanoUtils.stakeToHash(addr));
+      join = "join stake_address sa on sa.id=txo.stake_address_id ";
+      where = "sa.hash_raw=? ";
     } else {
+      hash = Hex.decodeHex(CardanoUtils.extractPaymentHash(addr));
       join = "";
-      where = "uv.address=? ";
+      where = "txo.payment_cred=? ";
     }
 
     String query =
@@ -433,15 +480,15 @@ public class CardanoDbSyncService {
 										join tx_metadata tm on tm.tx_id=mtm.tx_id and tm."key"=721
 										where mtm.ident=max(mto.ident) and mtm.quantity>0
 										order by tm.id desc limit 1) metaData
-								from utxo_view uv
+								from tx_out txo
 								%s
-								join tx_out txo on txo.tx_id = uv.tx_id and txo."index" = uv."index"
 								join ma_tx_out mto on mto.tx_out_id=txo.id
 								join multi_asset ma on ma.id=mto.ident
 								where
-									%s
+									txo.consumed_by_tx_id is null
+									and %s
 								group by ma."policy", ma.name
-								order by max(uv.id) desc
+								order by max(txo.id) desc
 								) sub
 						""",
             join, where);
@@ -457,7 +504,7 @@ public class CardanoDbSyncService {
                 rs.getLong("quantity"),
                 rs.getString("name"),
                 rs.getString("image")),
-        addr);
+        hash);
   }
 
   public TokenDetails getTokenDetails(String policyId, String assetName) throws DecoderException {
@@ -532,10 +579,10 @@ public class CardanoDbSyncService {
       return jdbcTemplate.queryForObject(
           """
 							select
-								(select sum(value) from utxo_view utxo where utxo.stake_address_id=d.addr_id) stake
+								(select sum(value) from tx_out utxo where utxo.stake_address_id=d.addr_id and utxo.consumed_by_tx_id is null) stake
 								,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
 								,(select ticker_name from off_chain_pool_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
-								,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id group by es.epoch_no order by es.epoch_no desc limit 1) total_stake
+								,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id and es.epoch_no = (select max(epoch_no) from epoch_stake es2 where es2.pool_id=d.pool_hash_id)) total_stake
 							from delegation d
 							join stake_address sa on sa.id=d.addr_id
 							where sa."view"=?
@@ -584,6 +631,9 @@ public class CardanoDbSyncService {
   }
 
   public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
+    if (!isMaterializedViewPopulated("ct_ma_owners")) {
+      return List.of();
+    }
     return jdbcTemplate.query(
         """
 					select * from ct_ma_owners mo where mo.policy=?
@@ -606,9 +656,8 @@ public class CardanoDbSyncService {
         """
 					select ma.name assetName
 					from stake_address sa
-					join utxo_view uv on uv.stake_address_id=sa.id
-					join tx_out to2 on to2.tx_id=uv.tx_id and to2."index"=uv."index"
-					join ma_tx_out mto on mto.tx_out_id=to2.id
+					join tx_out txo on txo.stake_address_id=sa.id and txo.consumed_by_tx_id is null
+					join ma_tx_out mto on mto.tx_out_id=txo.id
 					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
 					where sa.view=?
 				""",
@@ -621,14 +670,19 @@ public class CardanoDbSyncService {
     try {
       return jdbcTemplate.queryForObject(
           """
-					select address from ct_ma_owners mo
+					select coalesce(sa.view, txo.address) address
+					from multi_asset ma
+					join ma_tx_out mto on mto.ident = ma.id
+					join tx_out txo on txo.id = mto.tx_out_id and txo.consumed_by_tx_id is null
+					left join stake_address sa on sa.id = txo.stake_address_id
 					where
-					mo."policy"=?
-					and ?=ANY(mo.manames)
+					ma."policy"=?
+					and ma.name=?
+					limit 1
 					""",
           (rs, rowNum) -> new StakeAddress(rs.getString("address")),
           handlePolicyBytes,
-          Hex.encodeHexString(handle.getBytes()));
+          handle.getBytes());
     } catch (EmptyResultDataAccessException e) {
       return null;
     }
@@ -638,7 +692,7 @@ public class CardanoDbSyncService {
     try {
       return jdbcTemplate.queryForObject(
           """
-					select tm."json"
+					select json_agg(tm."json" order by tm.key)
 					from tx t
 					join tx_metadata tm on tm.tx_id=t.id
 					where t.hash=?
@@ -738,7 +792,7 @@ public class CardanoDbSyncService {
             .toArray(byte[][]::new));
   }
 
-  public List<AccountStatementRow> getStatement(String address) {
+  public List<AccountStatementRow> getStatement(String address) throws DecoderException {
     if (address.startsWith("stake")) {
       return accountStatement(address);
     } else {
@@ -746,7 +800,8 @@ public class CardanoDbSyncService {
     }
   }
 
-  private List<AccountStatementRow> addressStatement(String address) {
+  private List<AccountStatementRow> addressStatement(String address) throws DecoderException {
+    byte[] paymentCred = Hex.decodeHex(CardanoUtils.extractPaymentHash(address));
     return jdbcTemplate.query(
         """
 						select
@@ -775,7 +830,7 @@ public class CardanoDbSyncService {
 									from tx_out to2
 									join tx t2 on t2.id=to2.tx_id
 									join block b2 on b2.id=t2.block_id
-									where to2.address = ?
+									where to2.payment_cred = ?
 									union all
 									-- normal output
 									select
@@ -788,18 +843,17 @@ public class CardanoDbSyncService {
 										0 "IN",
 										0 "WITHDRAWN",
 										0 "REWARDS"
-									from tx_in ti
-									join tx t2 on t2.id=ti.tx_in_id
-									join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+									from tx_out to2
+									join tx t2 on t2.id=to2.consumed_by_tx_id
 									join block b2 on b2.id=t2.block_id
-									where to2.address = ?
+									where to2.payment_cred = ?
 						) movings
 						group by "timestamp", txId
 						order by "timestamp" desc, txId desc
 						""",
         accountStatementRowMapper,
-        address,
-        address);
+        paymentCred,
+        paymentCred);
   }
 
   private List<AccountStatementRow> accountStatement(String stakeAddress) {
@@ -845,9 +899,8 @@ public class CardanoDbSyncService {
 										0 "IN",
 										0 "WITHDRAWN",
 										0 "REWARDS"
-									from tx_in ti
-									join tx t2 on t2.id=ti.tx_in_id
-									join tx_out to2 on to2.tx_id=ti.tx_out_id and to2."index"=ti.tx_out_index
+									from tx_out to2
+									join tx t2 on t2.id=to2.consumed_by_tx_id
 									join block b2 on b2.id=t2.block_id
 									join stake_address sa on sa.id=to2.stake_address_id
 									where sa."view" = ?
@@ -907,6 +960,13 @@ public class CardanoDbSyncService {
               result.getLong("change"),
               result.getLong("sum"),
               result.getString("operations").split(","));
+
+  private boolean isMaterializedViewPopulated(String viewName) {
+    Boolean populated =
+        jdbcTemplate.queryForObject(
+            "select relispopulated from pg_class where relname = ?", Boolean.class, viewName);
+    return Boolean.TRUE.equals(populated);
+  }
 
   private String toHexString(byte[] bytes) {
     return bytes == null ? null : Hex.encodeHexString(bytes);

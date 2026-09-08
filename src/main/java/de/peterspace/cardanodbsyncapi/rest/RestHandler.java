@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RestHandler {
 
   private static final String SAMPLE_STAKE_ADDRESS =
-      "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn";
+      "stake1u9k8maputfwef7kjl6nvguupxcvllplpa967amss06fxwngzsj30w";
   private static final String SAMPLE_ADDRESS =
       "addr1qx8lsj4menq5s7w5f8jupm64n9d3aamvcppllujwse473636fhhttcg3x8kfhm6qqpvujfhgmu8jww3mfn49m3fkjssqhx0348";
   private static final String SAMPLE_POLICY_ID =
@@ -124,7 +124,8 @@ public class RestHandler {
   @GetMapping(value = "/{address}/statement")
   @Cacheable("getStatement")
   public List<AccountStatementRow> getStatement(
-      @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address) {
+      @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String address)
+      throws DecoderException {
     return cardanoDbSyncService.getStatement(address);
   }
 
@@ -159,7 +160,7 @@ public class RestHandler {
                             value =
                                 """
 							{
-							  "stakeAddress": "stake1u8wmu7jc0e4a6fn5haflczfjy6aagwhsxh6w5p7hsyt8jeshhy0rn",
+							  "stakeAddress": "stake1u9k8maputfwef7kjl6nvguupxcvllplpa967amss06fxwngzsj30w",
 							  "policyIds": [
 							    "38e97ac082af9312c69c9e2b0949c0d7873f0bbca34b0a8905ec2441"
 							  ]
