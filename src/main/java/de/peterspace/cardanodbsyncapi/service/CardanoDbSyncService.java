@@ -43,30 +43,30 @@ public class CardanoDbSyncService {
     handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
 
     // find mints of multi asset
-    log.info("Creating index idx_ma_tx_mint_ident");
+    log.info("Creating index ct_idx_ma_tx_mint_ident");
     jdbcTemplate.execute(
-        "CREATE index if not exists idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
+        "CREATE index if not exists ct_idx_ma_tx_mint_ident ON ma_tx_mint USING btree (ident);");
 
     // find multi asset by fingerprint
-    log.info("Creating index idx_multi_asset_fingerprint");
+    log.info("Creating index ct_idx_multi_asset_fingerprint");
     jdbcTemplate.execute(
-        "CREATE index if not exists idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
+        "CREATE index if not exists ct_idx_multi_asset_fingerprint ON multi_asset USING btree (fingerprint);");
 
     // index for utxo view, to lookup used txos dirctly with txid and idx, not only
     // txid
-    log.info("Creating index idx_tx_in_tx_out_id_tx_out_index");
+    log.info("Creating index ct_idx_tx_in_tx_out_id_tx_out_index");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
+        "CREATE INDEX if not exists ct_idx_tx_in_tx_out_id_tx_out_index ON tx_in USING btree (tx_out_id, tx_out_index);");
 
-    log.info("Creating index tx_metadata_tx_id_key_index");
+    log.info("Creating index ct_tx_metadata_tx_id_key_index");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
+        "CREATE INDEX if not exists ct_tx_metadata_tx_id_key_index ON tx_metadata USING btree (tx_id, key);");
 
     // token owners
-    log.info("Creating materialized view ma_owners");
+    log.info("Creating materialized view ct_ma_owners");
     jdbcTemplate.execute(
         """
-				CREATE MATERIALIZED VIEW IF NOT exists ma_owners AS
+				CREATE MATERIALIZED VIEW IF NOT exists ct_ma_owners AS
 					select
 						coalesce(sa."view" , txo.address) address
 						,sum(mto.quantity) quantity
@@ -82,17 +82,18 @@ public class CardanoDbSyncService {
 					group by ma."policy", coalesce(sa."view" , txo.address);
 					""");
 
-    log.info("Creating index ma_owners");
+    log.info("Creating index ct_ma_owners_address_policy");
     jdbcTemplate.execute(
-        "CREATE UNIQUE INDEX if not exists ma_owners ON ma_owners (address, policy);");
+        "CREATE UNIQUE INDEX if not exists ct_ma_owners_address_policy ON ct_ma_owners (address, policy);");
 
-    log.info("Creating index idx_ma_owners_policy");
-    jdbcTemplate.execute("CREATE INDEX if not exists idx_ma_owners_policy ON ma_owners (policy);");
+    log.info("Creating index ct_idx_ma_owners_policy");
+    jdbcTemplate.execute(
+        "CREATE INDEX if not exists ct_idx_ma_owners_policy ON ct_ma_owners (policy);");
 
-    log.info("Creating materialized view minswap_utxos");
+    log.info("Creating materialized view ct_minswap_pools");
     jdbcTemplate.execute(
         """
-					CREATE MATERIALIZED VIEW IF NOT exists minswap_pools AS
+					CREATE MATERIALIZED VIEW IF NOT exists ct_minswap_pools AS
 						select
 							ma_a."policy" policy_a,
 							ma_a."name" name_a,
@@ -109,9 +110,9 @@ public class CardanoDbSyncService {
 							uv.payment_cred = decode('ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b', 'hex')
 				""");
 
-    log.info("Creating index minswap_utxos_idx");
+    log.info("Creating index ct_minswap_pools_idx");
     jdbcTemplate.execute(
-        "CREATE INDEX if not exists minswap_pools_idx ON minswap_pools (policy_a, name_a);");
+        "CREATE INDEX if not exists ct_minswap_pools_idx ON ct_minswap_pools (policy_a, name_a);");
 
     log.info("Indexes created");
   }
@@ -119,15 +120,15 @@ public class CardanoDbSyncService {
   @TrackExecutionTime
   @Scheduled(cron = "0 0 0/12 * * *")
   public void updateOwnerView() {
-    log.info("Refreshing ma_owners");
-    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ma_owners;");
+    log.info("Refreshing ct_ma_owners");
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ct_ma_owners;");
   }
 
   @TrackExecutionTime
   @Scheduled(cron = "0 0 * * * *")
   public void updateMinswapView() {
-    log.info("Refreshing minswap_utxos");
-    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY minswap_utxos;");
+    log.info("Refreshing ct_minswap_pools");
+    jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY ct_minswap_pools;");
   }
 
   public List<Utxo> getUtxos(String addr) throws DecoderException {
@@ -216,7 +217,7 @@ public class CardanoDbSyncService {
     String query =
         """
 				select policy_a, name_a, quantity_a, policy_b, name_b, quantity_b
-				from minswap_pools
+				from ct_minswap_pools
 				where policy_a=? and name_a=?
 				""";
     return jdbcTemplate.query(
@@ -585,7 +586,7 @@ public class CardanoDbSyncService {
   public List<OwnerInfo> getOwners(String policyId) throws DecoderException {
     return jdbcTemplate.query(
         """
-					select * from ma_owners mo where mo.policy=?
+					select * from ct_ma_owners mo where mo.policy=?
 				""",
         (rs, rowNum) -> {
           List<String> maNames = new ArrayList<>();
@@ -620,7 +621,7 @@ public class CardanoDbSyncService {
     try {
       return jdbcTemplate.queryForObject(
           """
-					select address from ma_owners mo
+					select address from ct_ma_owners mo
 					where
 					mo."policy"=?
 					and ?=ANY(mo.manames)
