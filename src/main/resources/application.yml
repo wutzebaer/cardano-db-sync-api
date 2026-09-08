@@ -14,12 +14,13 @@ server:
   shutdown: graceful
   servlet:
     context-path: /cardanoDbSyncApi
-  error:
-    include-stacktrace: never
-    include-exception: false
-    include-message: always
 
 spring:
+  web:
+    error:
+      include-stacktrace: never
+      include-exception: false
+      include-message: always
   cache:
     jcache:
       config: classpath:ehcache.xml

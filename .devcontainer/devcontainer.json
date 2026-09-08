@@ -1,6 +1,6 @@
 {
     "name": "Java",
-    "image": "mcr.microsoft.com/devcontainers/java:21",
+    "image": "mcr.microsoft.com/devcontainers/java:25-bookworm",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -31,6 +31,7 @@
         }
     },
     "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:4": {},
         "ghcr.io/devcontainers-extra/features/mvnd-sdkman:2": {}
     },
     "containerEnv": {
