@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
@@ -452,6 +453,16 @@ public class CardanoDbSyncService {
     } else if (bits[0].length() == 44 && bits[0].startsWith("asset")) {
       filters.add("and ma.fingerprint=?");
       filterParams.add(bits[0]);
+    } else if (filter.startsWith("$") && filter.length() > 1) {
+      byte[] handleName =
+          filter.substring(1).toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+      byte[] cip68Name = new byte[4 + handleName.length];
+      System.arraycopy(Hex.decodeHex("000de140"), 0, cip68Name, 0, 4);
+      System.arraycopy(handleName, 0, cip68Name, 4, handleName.length);
+      filters.add("and ma.\"policy\"=? and ma.name in (?, ?)");
+      filterParams.add(handlePolicyBytes);
+      filterParams.add(handleName);
+      filterParams.add(cip68Name);
     } else {
       return List.of();
     }

@@ -175,6 +175,29 @@ class RestHandlerTest {
   }
 
   @Test
+  void getTokenSearchByHandle() throws Exception {
+    mockMvc
+        .perform(get("/tokenSearch").param("filter", "$petergrossmann"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$", hasSize(greaterThan(0))))
+        .andExpect(jsonPath("$[*].maPolicyId", everyItem(equalTo(SAMPLE_CIP68_POLICY))))
+        .andExpect(jsonPath("$[0].name", containsString("petergrossmann")));
+  }
+
+  @Test
+  void getTokenSearchByCip68Handle() throws Exception {
+    mockMvc
+        .perform(get("/tokenSearch").param("filter", "$nuts"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$", hasSize(greaterThan(0))))
+        .andExpect(jsonPath("$[0].maPolicyId", equalTo(SAMPLE_CIP68_POLICY)))
+        .andExpect(jsonPath("$[0].name", equalTo("$nuts")))
+        .andExpect(jsonPath("$[0].cip", equalTo(68)));
+  }
+
+  @Test
   void getAddressTokenList() throws Exception {
     mockMvc
         .perform(get("/{address}/token", SAMPLE_STAKE_ADDRESS))

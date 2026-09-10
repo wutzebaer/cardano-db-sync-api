@@ -113,7 +113,7 @@ public class RestHandler {
   @GetMapping(value = "/tokenSearch")
   @Cacheable("getTokenSearch")
   public List<TokenListItem> getTokenSearch(
-      @Parameter(example = SAMPLE_POLICY_ID) @RequestParam String filter,
+      @Parameter(example = "$petergrossmann") @RequestParam String filter,
       @Parameter(example = SAMPLE_POLICY_ID + "." + SAMPLE_ASSET_NAME) @RequestParam(required = false)
           String after)
       throws DecoderException {
