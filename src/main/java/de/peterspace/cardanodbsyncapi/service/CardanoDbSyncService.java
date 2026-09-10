@@ -90,21 +90,27 @@ public class CardanoDbSyncService {
         """
 					CREATE OR REPLACE FUNCTION ct_cip68_metadata(p_policy bytea, p_name bytea)
 					RETURNS jsonb
-					LANGUAGE sql STABLE AS $$
-					  SELECT d.value->'fields'->0
-					  FROM multi_asset ref
-					  JOIN ma_tx_out mto ON mto.ident = ref.id
-					  JOIN tx_out txo ON txo.id = mto.tx_out_id AND txo.consumed_by_tx_id IS NULL
-					  JOIN datum d ON d.hash = txo.data_hash
-					  WHERE ref.policy = p_policy
-					    AND length(p_name) >= 4
-					    AND substring(p_name from 1 for 4) IN (
-					      decode('000de140', 'hex'),
-					      decode('0014df10', 'hex'),
-					      decode('001bc280', 'hex')
-					    )
-					    AND ref.name = decode('000643b0', 'hex') || substring(p_name from 5)
-					  LIMIT 1
+					LANGUAGE plpgsql STABLE AS $$
+					BEGIN
+					  IF p_name IS NULL OR length(p_name) < 4
+					     OR substring(p_name from 1 for 4) NOT IN (
+					       decode('000de140', 'hex'),
+					       decode('0014df10', 'hex'),
+					       decode('001bc280', 'hex')
+					     ) THEN
+					    RETURN NULL;
+					  END IF;
+					  RETURN (
+					    SELECT d.value->'fields'->0
+					    FROM multi_asset ref
+					    JOIN ma_tx_out mto ON mto.ident = ref.id
+					    JOIN tx_out txo ON txo.id = mto.tx_out_id AND txo.consumed_by_tx_id IS NULL
+					    JOIN datum d ON d.hash = txo.data_hash
+					    WHERE ref.policy = p_policy
+					      AND ref.name = decode('000643b0', 'hex') || substring(p_name from 5)
+					    LIMIT 1
+					  );
+					END;
 					$$;
 					""");
     jdbcTemplate.execute("DROP FUNCTION IF EXISTS ct_from_plutus(jsonb);");
@@ -460,36 +466,72 @@ public class CardanoDbSyncService {
       filterParams.add(Hex.decodeHex(afterBits[1]));
     }
 
+    filters.add(
+        """
+							and (
+								length(ma.name) < 4
+								or substring(ma.name from 1 for 4) in (
+									decode('000de140','hex'), decode('0014df10','hex'), decode('001bc280','hex')
+								)
+								or (get_byte(ma.name, 0) >> 4) <> 0
+								or (get_byte(ma.name, 3) & 15) <> 0
+							)""");
+
     return jdbcTemplate.query(
         """
-						select
-							max(mtm.id) ma_mint_id
-							,max(b.slot_no) slot_no
-							,ma."policy" ma_policy_id
-							,ma.name ma_name
-							,max(ma.fingerprint) ma_fingerprint
-							,sum(mtm.quantity) quantity
-							,ct_cip68_metadata(ma."policy", ma.name) cip68
-							,(select
-								coalesce(tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'escape'), tm.json->encode(ma.policy::bytea, 'hex')->encode(ma.name::bytea, 'hex'))
-								from ma_tx_mint mtm2
-								join tx_metadata tm on tm.tx_id = mtm2.tx_id and tm.key=721
-								where mtm2.ident = max(ma.id) and mtm2.quantity>0
-								order by mtm2.id desc
-								limit 1) cip25
-						from ma_tx_mint mtm
-						join multi_asset ma on ma.id = mtm.ident
-						join tx on tx.id = mtm.tx_id
-						join block b on b.id = tx.block_id
-						where true
-						"""
+						with page as materialized (
+							select ma.id, ma.policy, ma.name, ma.fingerprint
+							from multi_asset ma
+							where true
+							"""
             + StringUtils.join(filters, " ")
             + """
 
-						group by ma."policy", ma.name
-						having sum(mtm.quantity) > 0
-						order by ma."policy", ma.name
-						limit 100
+							order by ma.policy, ma.name
+							limit 100
+						),
+						agg as materialized (
+							select
+								page.id
+								,page.policy
+								,page.name
+								,page.fingerprint
+								,max(mtm.id) ma_mint_id
+								,max(mtm.id) filter (where mtm.quantity > 0) pos_mint_id
+								,sum(mtm.quantity) quantity
+							from page
+							join ma_tx_mint mtm on mtm.ident = page.id
+							group by page.id, page.policy, page.name, page.fingerprint
+							having sum(mtm.quantity) > 0
+						)
+						select
+							agg.ma_mint_id
+							,b.slot_no
+							,agg.policy ma_policy_id
+							,agg.name ma_name
+							,agg.fingerprint ma_fingerprint
+							,agg.quantity
+							,case
+								when length(agg.name) >= 4 and substring(agg.name from 1 for 4) in (
+									decode('000de140','hex'), decode('0014df10','hex'), decode('001bc280','hex')
+								) then ct_cip68_metadata(agg.policy, agg.name)
+							end cip68
+							,case
+								when length(agg.name) >= 4 and substring(agg.name from 1 for 4) in (
+									decode('000de140','hex'), decode('0014df10','hex'), decode('001bc280','hex')
+								) then null
+								else coalesce(
+									tm.json->encode(agg.policy::bytea, 'hex')->encode(agg.name::bytea, 'escape'),
+									tm.json->encode(agg.policy::bytea, 'hex')->encode(agg.name::bytea, 'hex')
+								)
+							end cip25
+						from agg
+						join ma_tx_mint mtm on mtm.id = agg.ma_mint_id
+						join tx on tx.id = mtm.tx_id
+						join block b on b.id = tx.block_id
+						left join ma_tx_mint mtm_pos on mtm_pos.id = agg.pos_mint_id
+						left join tx_metadata tm on tm.tx_id = mtm_pos.tx_id and tm.key = 721
+						order by agg.policy, agg.name
 						""",
         (rs, rowNum) -> toTokenListItem(rs, rs.getLong("ma_mint_id"), rs.getLong("slot_no")),
         filterParams.toArray());
@@ -1136,10 +1178,7 @@ public class CardanoDbSyncService {
       return null;
     }
     String hex = nameHex;
-    if (hex.length() >= 8
-        && (hex.startsWith("000de140")
-            || hex.startsWith("0014df10")
-            || hex.startsWith("001bc280"))) {
+    if (hasCip67Prefix(hex)) {
       hex = hex.substring(8);
     }
     if (hex.isEmpty()) {
@@ -1153,6 +1192,10 @@ public class CardanoDbSyncService {
     } catch (DecoderException | CharacterCodingException e) {
       return null;
     }
+  }
+
+  private boolean hasCip67Prefix(String nameHex) {
+    return nameHex.length() >= 8 && nameHex.charAt(0) == '0' && nameHex.charAt(7) == '0';
   }
 
   private String imageField(JsonNode metadata) {
