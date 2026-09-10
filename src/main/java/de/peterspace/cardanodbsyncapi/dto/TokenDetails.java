@@ -10,6 +10,7 @@ public class TokenDetails {
   @NotNull String maName;
   @NotNull String fingerprint;
   String metadata;
+  Integer cip;
   @NotNull String maPolicyScript;
   @NotNull String txHash;
   @NotNull long totalSupply;

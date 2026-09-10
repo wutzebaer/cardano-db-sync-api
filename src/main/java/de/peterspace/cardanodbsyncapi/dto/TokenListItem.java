@@ -13,4 +13,5 @@ public class TokenListItem {
   @NotNull long quantity;
   @NotNull String name;
   @NotNull String image;
+  Integer cip;
 }

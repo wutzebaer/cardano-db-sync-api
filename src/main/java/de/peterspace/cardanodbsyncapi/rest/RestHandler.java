@@ -100,15 +100,24 @@ public class RestHandler {
     return cardanoDbSyncService.getStakeHashByAddress(stakeAddress);
   }
 
-  @Operation(summary = "getTokenList")
-  @GetMapping(value = "/token")
-  @Cacheable("getTokenList")
-  public List<TokenListItem> getTokenList(
+  @Operation(summary = "getTokenFeed")
+  @GetMapping(value = "/tokenFeed")
+  @Cacheable("getTokenFeed")
+  public List<TokenListItem> getTokenFeed(
       @RequestParam(required = false) Long afterMintid,
-      @RequestParam(required = false) Long beforeMintid,
-      @Parameter(example = SAMPLE_POLICY_ID) @RequestParam(required = false) String filter)
+      @RequestParam(required = false) Long beforeMintid) {
+    return cardanoDbSyncService.getTokenFeed(afterMintid, beforeMintid);
+  }
+
+  @Operation(summary = "getTokenSearch")
+  @GetMapping(value = "/tokenSearch")
+  @Cacheable("getTokenSearch")
+  public List<TokenListItem> getTokenSearch(
+      @Parameter(example = SAMPLE_POLICY_ID) @RequestParam String filter,
+      @Parameter(example = SAMPLE_POLICY_ID + "." + SAMPLE_ASSET_NAME) @RequestParam(required = false)
+          String after)
       throws DecoderException {
-    return cardanoDbSyncService.getTokenList(afterMintid, beforeMintid, filter);
+    return cardanoDbSyncService.getTokenSearch(filter, after);
   }
 
   @Operation(summary = "getAddressTokenList")

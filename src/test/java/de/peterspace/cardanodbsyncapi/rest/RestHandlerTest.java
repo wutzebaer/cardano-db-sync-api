@@ -1,5 +1,6 @@
 package de.peterspace.cardanodbsyncapi.rest;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
@@ -37,6 +38,11 @@ class RestHandlerTest {
       "89267e9a35153a419e1b8ffa23e511ac39ea4e3b00452e9d500f2982";
   private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
   private static final String SAMPLE_FINGERPRINT = "asset1r9v95ujk83kx90lr3g8cd0uqu5de3kqjptp7sm";
+  private static final String SAMPLE_CIP68_POLICY =
+      "f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a";
+  private static final String SAMPLE_CIP68_ASSET_NAME = "000de1406e757473";
+  private static final String SAMPLE_CIP68_FT_FINGERPRINT =
+      "asset14u343978h4nc9euau4a9xl29lx8ssepqy4qfx9";
   private static final String SAMPLE_STAKE_HASH =
       "e1ddbe7a587e6bdd2674bf53fc093226bbd43af035f4ea07d781167966";
   private static final String SAMPLE_TX_ID =
@@ -131,9 +137,9 @@ class RestHandlerTest {
   }
 
   @Test
-  void getTokenList() throws Exception {
+  void getTokenFeed() throws Exception {
     mockMvc
-        .perform(get("/token"))
+        .perform(get("/tokenFeed"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
         .andExpect(jsonPath("$", hasSize(greaterThan(0))))
@@ -145,14 +151,27 @@ class RestHandlerTest {
   }
 
   @Test
-  void getTokenListFiltered() throws Exception {
+  void getTokenSearch() throws Exception {
     mockMvc
-        .perform(get("/token").param("filter", SAMPLE_POLICY_ID))
+        .perform(get("/tokenSearch").param("filter", SAMPLE_POLICY_ID))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
         .andExpect(jsonPath("$", hasSize(greaterThan(0))))
         .andExpect(jsonPath("$[*].maPolicyId", everyItem(equalTo(SAMPLE_POLICY_ID))))
-        .andExpect(jsonPath("$[*].maFingerprint", everyItem(startsWith("asset"))));
+        .andExpect(jsonPath("$[*].maFingerprint", everyItem(startsWith("asset"))))
+        .andExpect(jsonPath("$[0].cip", equalTo(25)));
+  }
+
+  @Test
+  void getTokenSearchAfterSkipsCursor() throws Exception {
+    mockMvc
+        .perform(
+            get("/tokenSearch")
+                .param("filter", SAMPLE_CIP68_POLICY + "." + SAMPLE_CIP68_ASSET_NAME)
+                .param("after", SAMPLE_CIP68_POLICY + "." + SAMPLE_CIP68_ASSET_NAME))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$", hasSize(0)));
   }
 
   @Test
@@ -231,7 +250,8 @@ class RestHandlerTest {
         .andExpect(jsonPath("$.slotNo", numberAtLeast(1)))
         .andExpect(jsonPath("$.txHash", matchesPattern(HEX_64)))
         .andExpect(jsonPath("$.totalSupply", numberAtLeast(0)))
-        .andExpect(jsonPath("$.maPolicyScript", not(emptyOrNullString())));
+        .andExpect(jsonPath("$.maPolicyScript", not(emptyOrNullString())))
+        .andExpect(jsonPath("$.cip", equalTo(25)));
   }
 
   @Test
@@ -243,6 +263,45 @@ class RestHandlerTest {
         .andExpect(jsonPath("$.maPolicyId", matchesPattern(HEX_56)))
         .andExpect(jsonPath("$.maName", not(emptyOrNullString())))
         .andExpect(jsonPath("$.totalSupply", numberAtLeast(0)));
+  }
+
+  @Test
+  void getTokenDetailsCip68() throws Exception {
+    mockMvc
+        .perform(get("/token/{policyId}/{assetName}", SAMPLE_CIP68_POLICY, SAMPLE_CIP68_ASSET_NAME))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.maPolicyId", equalTo(SAMPLE_CIP68_POLICY)))
+        .andExpect(jsonPath("$.maName", equalTo(SAMPLE_CIP68_ASSET_NAME)))
+        .andExpect(jsonPath("$.metadata", containsString("\"name\"")))
+        .andExpect(jsonPath("$.metadata", containsString("$nuts")))
+        .andExpect(jsonPath("$.metadata", containsString("ipfs://")))
+        .andExpect(jsonPath("$.cip", equalTo(68)));
+  }
+
+  @Test
+  void getTokenListCip68() throws Exception {
+    mockMvc
+        .perform(get("/tokenSearch").param("filter", SAMPLE_CIP68_POLICY + "." + SAMPLE_CIP68_ASSET_NAME))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].maPolicyId", equalTo(SAMPLE_CIP68_POLICY)))
+        .andExpect(jsonPath("$[0].maName", equalTo(SAMPLE_CIP68_ASSET_NAME)))
+        .andExpect(jsonPath("$[0].name", equalTo("$nuts")))
+        .andExpect(jsonPath("$[0].image", startsWith("ipfs://")))
+        .andExpect(jsonPath("$[0].cip", equalTo(68)));
+  }
+
+  @Test
+  void getTokenListCip68FungibleUsesLogoAsImage() throws Exception {
+    mockMvc
+        .perform(get("/tokenSearch").param("filter", SAMPLE_CIP68_FT_FINGERPRINT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isArray())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].name", equalTo("PBG Token")))
+        .andExpect(jsonPath("$[0].image", equalTo("https://token.pbg.io/logo.png")))
+        .andExpect(jsonPath("$[0].cip", equalTo(68)));
   }
 
   @Test
