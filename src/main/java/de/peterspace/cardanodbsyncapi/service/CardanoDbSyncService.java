@@ -817,20 +817,9 @@ public class CardanoDbSyncService {
         (rs, rowNum) -> rs.getLong(1));
   }
 
-  public List<TokenDetails> getLastMint(String stakeAddress, List<String> policyIds) {
+  public List<TokenDetails> getMints(String stakeAddress) {
     return jdbcTemplate.query(
         """
-							with lastTransaction as (
-								select t2.hash
-								from ma_tx_mint mtm
-								join multi_asset ma ON ma.id=mtm.ident
-								join tx_out to2 on to2.tx_id=mtm.tx_id
-								join tx t2 on t2.id=mtm.tx_id
-								join stake_address sa on sa.id=to2.stake_address_id
-								where sa.view=? AND ma."policy"=ANY(?)
-								order by mtm.id desc
-								limit 1
-							)
 							select
 								b.slot_no
 								,ma."policy" ma_policy_id
@@ -848,21 +837,18 @@ public class CardanoDbSyncService {
 							left join tx_metadata tm on tm.tx_id = tx.id and tm."key"=721
 							left join lateral (select ct_cip68_metadata(ma."policy", ma.name) cip68) c68 on true
 							join script on script.hash=ma."policy"
-							where tx.hash=(select hash from lastTransaction)
-							order by ma.id desc
+							where exists (
+								select 1
+								from tx_out to2
+								join stake_address sa on sa.id=to2.stake_address_id
+								where to2.tx_id=mtm.tx_id
+									and sa.view=?
+							)
+							and mtm.quantity > 0
+							order by mtm.id desc
 						""",
         (rs, rowNum) -> toTokenDetails(rs),
-        stakeAddress,
-        policyIds.stream()
-            .map(
-                policyId -> {
-                  try {
-                    return Hex.decodeHex(policyId);
-                  } catch (DecoderException e) {
-                    throw new RuntimeException(e);
-                  }
-                })
-            .toArray(byte[][]::new));
+        stakeAddress);
   }
 
   public List<AccountStatementRow> getStatement(String address) throws DecoderException {

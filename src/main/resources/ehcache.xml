@@ -137,7 +137,7 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
-	<cache alias="getLastMint">
+	<cache alias="getMints">
 		<expiry>
 			<ttl unit="minutes">1</ttl>
 		</expiry>

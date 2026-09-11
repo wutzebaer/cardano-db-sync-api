@@ -12,7 +12,6 @@ import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -49,8 +47,6 @@ class RestHandlerTest {
       "a6ca444bd39cb51c7e997a9cead4a8071e2f7e5d1579ac4194b6aaaba923bc58";
   private static final String SAMPLE_POOL_HASH =
       "pool180fejev4xgwe2y53ky0pxvgxr3wcvkweu6feq5mdljfzcsmtg6u";
-  private static final String SAMPLE_LAST_MINT_POLICY =
-      "38e97ac082af9312c69c9e2b0949c0d7873f0bbca34b0a8905ec2441";
   private static final String HEX_64 = "^[0-9a-f]{64}$";
   private static final String HEX_56 = "^[0-9a-f]{56}$";
 
@@ -241,23 +237,13 @@ class RestHandlerTest {
   }
 
   @Test
-  void getLastMint() throws Exception {
+  void getMints() throws Exception {
     mockMvc
-        .perform(
-            post("/lastMint")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-					{
-					  "stakeAddress": "%s",
-					  "policyIds": ["%s"]
-					}
-					"""
-                        .formatted(SAMPLE_STAKE_ADDRESS, SAMPLE_LAST_MINT_POLICY)))
+        .perform(get("/{stakeAddress}/mints", SAMPLE_STAKE_ADDRESS))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
         .andExpect(jsonPath("$", hasSize(greaterThan(0))))
-        .andExpect(jsonPath("$[*].maPolicyId", everyItem(equalTo(SAMPLE_LAST_MINT_POLICY))))
+        .andExpect(jsonPath("$[*].maPolicyId", everyItem(matchesPattern(HEX_56))))
         .andExpect(jsonPath("$[*].txHash", everyItem(matchesPattern(HEX_64))))
         .andExpect(jsonPath("$[*].totalSupply", everyItem(numberAtLeast(0))));
   }
