@@ -12,6 +12,7 @@ import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -106,6 +108,19 @@ class RestHandlerTest {
         .perform(get("/{stakeAddress}/returnAddress", SAMPLE_STAKE_ADDRESS))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.address", startsWith("addr1")));
+  }
+
+  @Test
+  void getReturnAddresses() throws Exception {
+    mockMvc
+        .perform(
+            post("/returnAddresses")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("[\"" + SAMPLE_STAKE_ADDRESS + "\", \"stake1unknown\"]"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].stakeAddress", equalTo(SAMPLE_STAKE_ADDRESS)))
+        .andExpect(jsonPath("$[0].address", startsWith("addr1")));
   }
 
   @Test
@@ -290,7 +305,9 @@ class RestHandlerTest {
   @Test
   void getTokenListCip68() throws Exception {
     mockMvc
-        .perform(get("/tokenSearch").param("filter", SAMPLE_CIP68_POLICY + "." + SAMPLE_CIP68_ASSET_NAME))
+        .perform(
+            get("/tokenSearch")
+                .param("filter", SAMPLE_CIP68_POLICY + "." + SAMPLE_CIP68_ASSET_NAME))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
         .andExpect(jsonPath("$", hasSize(1)))

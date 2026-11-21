@@ -19,6 +19,7 @@ import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
+import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
@@ -342,6 +343,28 @@ public class CardanoDbSyncService {
     }
   }
 
+  public List<StakeReturnAddress> getReturnAddresses(List<String> stakeAddresses) {
+    if (stakeAddresses.isEmpty()) {
+      return List.of();
+    }
+    return jdbcTemplate.query(
+        """
+					select sa."view" stake_address, first_out.address
+					from stake_address sa
+					join lateral (
+						select txo.address
+						from tx_out txo
+						where txo.stake_address_id=sa.id
+						order by txo.id
+						limit 1
+					) first_out on true
+					where sa."view" = any(?)
+					""",
+        (rs, rowNum) ->
+            new StakeReturnAddress(rs.getString("stake_address"), rs.getString("address")),
+        (Object) stakeAddresses.toArray(String[]::new));
+  }
+
   public StakeAddress getStakeAddress(String address) {
     try {
       byte[] paymentCred = Hex.decodeHex(CardanoUtils.extractPaymentHash(address));
@@ -645,10 +668,7 @@ public class CardanoDbSyncService {
 
     try {
       return jdbcTemplate.queryForObject(
-          String.format(query, whereClause),
-          (rs, rowNum) ->
-              toTokenDetails(rs),
-          params);
+          String.format(query, whereClause), (rs, rowNum) -> toTokenDetails(rs), params);
     } catch (EmptyResultDataAccessException e) {
       return null;
     }
@@ -1106,7 +1126,10 @@ public class CardanoDbSyncService {
     }
     try {
       String utf8 =
-          StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(Hex.decodeHex(rest))).toString();
+          StandardCharsets.UTF_8
+              .newDecoder()
+              .decode(ByteBuffer.wrap(Hex.decodeHex(rest)))
+              .toString();
       return nested.has(utf8) ? nested.get(utf8) : null;
     } catch (DecoderException | CharacterCodingException e) {
       return null;

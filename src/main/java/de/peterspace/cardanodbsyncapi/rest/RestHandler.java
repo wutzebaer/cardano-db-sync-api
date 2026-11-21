@@ -8,6 +8,7 @@ import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
+import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
@@ -20,11 +21,15 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.DecoderException;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequiredArgsConstructor
@@ -39,6 +44,7 @@ public class RestHandler {
       "89267e9a35153a419e1b8ffa23e511ac39ea4e3b00452e9d500f2982";
   private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
   private static final String SAMPLE_FINGERPRINT = "asset1r9v95ujk83kx90lr3g8cd0uqu5de3kqjptp7sm";
+  private static final int MAX_RETURN_ADDRESSES = 10000;
   private final CardanoDbSyncService cardanoDbSyncService;
 
   @Operation(summary = "Get infos where address is staked to")
@@ -66,6 +72,19 @@ public class RestHandler {
   public ReturnAddress getReturnAddress(
       @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) {
     return cardanoDbSyncService.getReturnAddress(stakeAddress);
+  }
+
+  @Operation(
+      summary =
+          "Find the first known address for many stake addresses at once, unknown stake addresses are omitted")
+  @PostMapping(value = "/returnAddresses")
+  public List<StakeReturnAddress> getReturnAddresses(@RequestBody List<String> stakeAddresses) {
+    if (stakeAddresses.size() > MAX_RETURN_ADDRESSES) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "At most " + MAX_RETURN_ADDRESSES + " stake addresses per request");
+    }
+    return cardanoDbSyncService.getReturnAddresses(stakeAddresses);
   }
 
   @Operation(summary = "Find stakeAddress of address")
@@ -110,7 +129,8 @@ public class RestHandler {
   @Cacheable("getTokenSearch")
   public List<TokenListItem> getTokenSearch(
       @Parameter(example = "$petergrossmann") @RequestParam String filter,
-      @Parameter(example = SAMPLE_POLICY_ID + "." + SAMPLE_ASSET_NAME) @RequestParam(required = false)
+      @Parameter(example = SAMPLE_POLICY_ID + "." + SAMPLE_ASSET_NAME)
+          @RequestParam(required = false)
           String after)
       throws DecoderException {
     return cardanoDbSyncService.getTokenSearch(filter, after);
