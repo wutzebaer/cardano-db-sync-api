@@ -38,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,9 +54,13 @@ public class CardanoDbSyncService {
   private final ObjectMapper objectMapper = JsonMapper.builder().build();
   private byte[] handlePolicyBytes;
 
+  /** Policy of ADA Handle, differs per network. Default is mainnet. */
+  @Value("${cardano.handle-policy:f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a}")
+  private String handlePolicy;
+
   @PostConstruct
   public void init() throws DecoderException {
-    handlePolicyBytes = Hex.decodeHex("f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a");
+    handlePolicyBytes = Hex.decodeHex(handlePolicy);
 
     log.info("Creating index ct_idx_ma_tx_mint_ident");
     jdbcTemplate.execute(
@@ -333,7 +338,8 @@ public class CardanoDbSyncService {
 					from stake_address sa
 					join tx_out txo on txo.stake_address_id=sa.id
 					where sa."view"=?
-					order by txo.id
+					-- "+ 0" keeps the planner from walking the whole primary key to find the first row
+					order by txo.id + 0
 					limit 1
 					""",
           (rs, rowNum) -> new ReturnAddress(rs.getString("address")),
@@ -355,7 +361,8 @@ public class CardanoDbSyncService {
 						select txo.address
 						from tx_out txo
 						where txo.stake_address_id=sa.id
-						order by txo.id
+						-- "+ 0" keeps the planner from walking the whole primary key to find the first row
+						order by txo.id + 0
 						limit 1
 					) first_out on true
 					where sa."view" = any(?)
@@ -1004,7 +1011,7 @@ public class CardanoDbSyncService {
 									-- generated reward
 									select
 										0 "txId",
-										TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091),
+										coalesce((select e.start_time from epoch e where e.no = rw.earned_epoch), TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091)),
 										rw.earned_epoch epoch_no,
 										null hash,
 										'REWARD_'||rw."type" "TYPE",
