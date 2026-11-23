@@ -1099,7 +1099,8 @@ public class CardanoDbSyncService {
 									-- generated reward
 									select
 										0 "txId",
-										coalesce((select e.start_time from epoch e where e.no = rw.earned_epoch), TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091)),
+										-- start of the epoch, calculated: "epoch" is a view that aggregates the current epoch's blocks on every lookup
+										TO_TIMESTAMP(rw.earned_epoch * 432000 + 1506203091) at time zone 'utc',
 										rw.earned_epoch epoch_no,
 										null hash,
 										'REWARD_'||rw."type" "TYPE",
