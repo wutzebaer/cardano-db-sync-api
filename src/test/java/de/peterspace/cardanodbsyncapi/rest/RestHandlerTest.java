@@ -124,6 +124,19 @@ class RestHandlerTest {
   }
 
   @Test
+  void getHandlesOfStakeAddresses() throws Exception {
+    mockMvc
+        .perform(
+            post("/handles")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("[\"" + SAMPLE_STAKE_ADDRESS + "\", \"stake1unknown\"]"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(lessThanOrEqualTo(1))))
+        .andExpect(jsonPath("$[*].stakeAddress", everyItem(equalTo(SAMPLE_STAKE_ADDRESS))))
+        .andExpect(jsonPath("$[*].handle", everyItem(not(emptyOrNullString()))));
+  }
+
+  @Test
   void getStakeAddress() throws Exception {
     mockMvc
         .perform(get("/{address}/stakeAddress", SAMPLE_ADDRESS))

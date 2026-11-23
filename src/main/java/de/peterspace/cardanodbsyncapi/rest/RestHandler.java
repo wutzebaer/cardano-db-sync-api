@@ -7,6 +7,7 @@ import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
+import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
@@ -161,6 +162,19 @@ public class RestHandler {
       @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress)
       throws DecoderException {
     return cardanoDbSyncService.getHandles(stakeAddress);
+  }
+
+  @Operation(
+      summary =
+          "Find one handle for many stake addresses at once, stake addresses without a handle are omitted")
+  @PostMapping(value = "/handles")
+  public List<StakeHandle> getHandlesOfStakeAddresses(@RequestBody List<String> stakeAddresses) {
+    if (stakeAddresses.size() > MAX_RETURN_ADDRESSES) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "At most " + MAX_RETURN_ADDRESSES + " stake addresses per request");
+    }
+    return cardanoDbSyncService.getHandlesOfStakeAddresses(stakeAddresses);
   }
 
   @Operation(summary = "Get address for handle")

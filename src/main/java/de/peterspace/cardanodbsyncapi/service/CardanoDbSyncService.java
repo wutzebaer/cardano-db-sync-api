@@ -18,6 +18,7 @@ import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
+import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
@@ -31,8 +32,12 @@ import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
@@ -771,6 +776,64 @@ public class CardanoDbSyncService {
         (rs, rowNum) -> new StakeAddress(new String(rs.getBytes("assetName"))),
         handlePolicyBytes,
         stakeAddress);
+  }
+
+  /**
+   * One handle per stake address: the shortest, then the alphabetically first. Which handle a
+   * holder picked as default is not on-chain. Stake addresses without a handle are omitted.
+   */
+  public List<StakeHandle> getHandlesOfStakeAddresses(List<String> stakeAddresses) {
+    if (stakeAddresses.isEmpty()) {
+      return List.of();
+    }
+    Map<String, String> handles = new TreeMap<>();
+    jdbcTemplate.query(
+        """
+					select sa.view stake_address, ma.name asset_name
+					from stake_address sa
+					join tx_out txo on txo.stake_address_id=sa.id and txo.consumed_by_tx_id is null
+					join ma_tx_out mto on mto.tx_out_id=txo.id
+					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
+					where sa.view = any(?)
+					""",
+        rs -> {
+          String handle = handleName(rs.getBytes("asset_name"));
+          if (handle != null) {
+            handles.merge(
+                rs.getString("stake_address"),
+                handle,
+                (a, b) -> HANDLE_ORDER.compare(a, b) <= 0 ? a : b);
+          }
+        },
+        handlePolicyBytes,
+        (Object) stakeAddresses.toArray(String[]::new));
+    return handles.entrySet().stream()
+        .map(entry -> new StakeHandle(entry.getKey(), entry.getValue()))
+        .toList();
+  }
+
+  private static final Comparator<String> HANDLE_ORDER =
+      Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder());
+
+  /** CIP-67 label 222, the token a holder owns of a CIP-68 handle */
+  private static final byte[] CIP68_USER_TOKEN = {0x00, 0x0d, (byte) 0xe1, 0x40};
+
+  /**
+   * Readable name of a handle asset, or null for assets that are not a handle of their holder, such
+   * as the reference token of a CIP-68 handle.
+   */
+  static String handleName(byte[] assetName) {
+    if (assetName.length == 0) {
+      return null;
+    }
+    if (assetName[0] != 0) {
+      return new String(assetName, StandardCharsets.UTF_8);
+    }
+    if (assetName.length > 4
+        && Arrays.equals(assetName, 0, 4, CIP68_USER_TOKEN, 0, 4)) {
+      return new String(assetName, 4, assetName.length - 4, StandardCharsets.UTF_8);
+    }
+    return null;
   }
 
   public StakeAddress getAddressByHandle(String handle) throws DecoderException {
