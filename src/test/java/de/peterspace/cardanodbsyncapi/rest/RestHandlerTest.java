@@ -76,7 +76,8 @@ class RestHandlerTest {
         .andExpect(jsonPath("$.stake", numberAtLeast(0)))
         .andExpect(jsonPath("$.poolHash", equalTo(SAMPLE_POOL_HASH)))
         .andExpect(jsonPath("$.tickerName", equalTo("CHIEN")))
-        .andExpect(jsonPath("$.totalStake", numberAtLeast(1)));
+        .andExpect(jsonPath("$.totalStake", numberAtLeast(1)))
+        .andExpect(jsonPath("$.poolRewards", numberAtLeast(0)));
   }
 
   @Test

@@ -9,4 +9,7 @@ public class StakeInfo {
   @NotNull String poolHash;
   @NotNull String tickerName;
   @NotNull long totalStake;
+
+  /** Lovelace of all rewards the address earned with this pool */
+  @NotNull long poolRewards;
 }

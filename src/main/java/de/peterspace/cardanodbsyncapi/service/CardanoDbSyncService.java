@@ -695,6 +695,8 @@ public class CardanoDbSyncService {
 								,(select view from pool_hash ph where ph.id=d.pool_hash_id order by id desc limit 1) pool_hash
 								,(select ticker_name from off_chain_pool_data pod where pod.pool_id=d.pool_hash_id order by id desc limit 1) ticker_name
 								,(select sum(amount) from epoch_stake es where es.pool_id=d.pool_hash_id and es.epoch_no = (select max(epoch_no) from epoch_stake es2 where es2.pool_id=d.pool_hash_id)) total_stake
+								-- a refund returns the deposit of a retired pool, it is not earned
+								,(select coalesce(sum(r.amount), 0) from reward r where r.addr_id=d.addr_id and r.pool_id=d.pool_hash_id and r.type <> 'refund') pool_rewards
 							from delegation d
 							join stake_address sa on sa.id=d.addr_id
 							where sa."view"=?
@@ -706,7 +708,8 @@ public class CardanoDbSyncService {
                   rs.getLong("stake"),
                   rs.getString("pool_hash"),
                   rs.getString("ticker_name"),
-                  rs.getLong("total_stake")),
+                  rs.getLong("total_stake"),
+                  rs.getLong("pool_rewards")),
           stakeAddress);
     } catch (EmptyResultDataAccessException e) {
       return null;
