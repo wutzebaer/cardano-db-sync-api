@@ -4,9 +4,12 @@ import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
 import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
 import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
+import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
+import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
+import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
@@ -16,6 +19,7 @@ import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
+import de.peterspace.cardanodbsyncapi.service.StakeCheckService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import java.util.List;
@@ -47,7 +51,47 @@ public class RestHandler {
   private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
   private static final String SAMPLE_FINGERPRINT = "asset1r9v95ujk83kx90lr3g8cd0uqu5de3kqjptp7sm";
   private static final int MAX_RETURN_ADDRESSES = 10000;
+  private static final String SAMPLE_POOL_ID =
+      "pool180fejev4xgwe2y53ky0pxvgxr3wcvkweu6feq5mdljfzcsmtg6u";
   private final CardanoDbSyncService cardanoDbSyncService;
+  private final StakeCheckService stakeCheckService;
+
+  @Operation(
+      summary =
+          "Staking state of a stake address: registration, pool, DRep and withdrawable rewards. Empty for an unknown address")
+  @GetMapping(value = "/{stakeAddress}/stakeCheck")
+  @Cacheable("getStakeCheck")
+  public StakeCheck getStakeCheck(
+      @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) {
+    return stakeCheckService.getStakeCheck(stakeAddress);
+  }
+
+  @Operation(summary = "Fees, retirement, stake and saturation of a pool. Empty for an unknown pool")
+  @GetMapping(value = "/pool/{poolHash}/check")
+  @Cacheable("getPoolCheck")
+  public PoolCheck getPoolCheck(
+      @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash) {
+    return stakeCheckService.getPoolCheck(poolHash);
+  }
+
+  @Operation(
+      summary =
+          "Blocks and delegator returns of a pool over the last epochs, next to the network average")
+  @GetMapping(value = "/pool/{poolHash}/performance")
+  @Cacheable("getPoolPerformance")
+  public PoolPerformance getPoolPerformance(
+      @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash) {
+    return stakeCheckService.getPoolPerformance(poolHash);
+  }
+
+  @Operation(
+      summary =
+          "Pools that make blocks, are not retiring, take at most 1 % margin and the minimum fixed cost and hold 300 thousand to 30 million ADA")
+  @GetMapping(value = "/poolAlternatives")
+  @Cacheable("getPoolAlternatives")
+  public List<PoolCheck> getPoolAlternatives() {
+    return stakeCheckService.getPoolAlternatives();
+  }
 
   @Operation(summary = "Get infos where address is staked to")
   @GetMapping(value = "/{stakeAddress}/stakeInfo")

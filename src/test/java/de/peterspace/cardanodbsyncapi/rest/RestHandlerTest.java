@@ -37,6 +37,8 @@ class RestHandlerTest {
       "addr1qx8lsj4menq5s7w5f8jupm64n9d3aamvcppllujwse473636fhhttcg3x8kfhm6qqpvujfhgmu8jww3mfn49m3fkjssqhx0348";
   private static final String SAMPLE_POLICY_ID =
       "89267e9a35153a419e1b8ffa23e511ac39ea4e3b00452e9d500f2982";
+  private static final String SAMPLE_POOL_ID =
+      "pool180fejev4xgwe2y53ky0pxvgxr3wcvkweu6feq5mdljfzcsmtg6u";
   private static final String SAMPLE_ASSET_NAME = "436176616c6965724b696e67436861726c6573";
   private static final String SAMPLE_FINGERPRINT = "asset1r9v95ujk83kx90lr3g8cd0uqu5de3kqjptp7sm";
   private static final String SAMPLE_CIP68_POLICY =
@@ -374,6 +376,60 @@ class RestHandlerTest {
         .perform(get("/policy/{policyId}/owners", SAMPLE_POLICY_ID))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray());
+  }
+
+  @Test
+  void getStakeCheck() throws Exception {
+    mockMvc
+        .perform(get("/{stakeAddress}/stakeCheck", SAMPLE_STAKE_ADDRESS))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stakeAddress", equalTo(SAMPLE_STAKE_ADDRESS)))
+        .andExpect(jsonPath("$.currentEpoch", numberAtLeast(600)))
+        .andExpect(jsonPath("$.balance", numberAtLeast(0)))
+        .andExpect(jsonPath("$.rewardsAvailable", numberAtLeast(0)));
+  }
+
+  @Test
+  void getStakeCheckOfAnUnknownAddressIsEmpty() throws Exception {
+    mockMvc
+        .perform(
+            get(
+                "/{stakeAddress}/stakeCheck",
+                "stake1uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(""));
+  }
+
+  @Test
+  void getPoolCheck() throws Exception {
+    mockMvc
+        .perform(get("/pool/{poolHash}/check", SAMPLE_POOL_ID))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.poolHash", equalTo(SAMPLE_POOL_ID)))
+        .andExpect(jsonPath("$.fixedCost", numberAtLeast(170000000)))
+        .andExpect(jsonPath("$.activeStake", numberAtLeast(1)))
+        .andExpect(jsonPath("$.delegators", numberAtLeast(1)))
+        .andExpect(jsonPath("$.saturationStake", numberAtLeast(1)));
+  }
+
+  @Test
+  void getPoolPerformance() throws Exception {
+    mockMvc
+        .perform(get("/pool/{poolHash}/performance", SAMPLE_POOL_ID))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.blocks", hasSize(12)))
+        .andExpect(jsonPath("$.lifetimeBlocks", numberAtLeast(1)))
+        .andExpect(jsonPath("$.networkRoa").isNumber());
+  }
+
+  @Test
+  void getPoolAlternatives() throws Exception {
+    mockMvc
+        .perform(get("/poolAlternatives"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(greaterThan(0))))
+        .andExpect(jsonPath("$[*].poolHash", everyItem(startsWith("pool1"))))
+        .andExpect(jsonPath("$[*].retiringEpoch", everyItem(equalTo(null))));
   }
 
   @Test
