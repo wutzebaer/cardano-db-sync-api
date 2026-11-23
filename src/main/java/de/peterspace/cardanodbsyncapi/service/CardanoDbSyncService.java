@@ -713,13 +713,19 @@ public class CardanoDbSyncService {
     }
   }
 
+  /** Every pool once, with the ticker of its most recent metadata. */
   public List<PoolInfo> getPoolList() {
     return jdbcTemplate.query(
         """
-				select distinct pod.ticker_name, ph."view" pool_hash
-				from off_chain_pool_data pod
-				join pool_hash ph on ph.id=pod.pool_id
-				order by pod.ticker_name
+				select ticker_name, pool_hash
+				from (
+					-- off_chain_pool_data keeps every metadata a pool ever registered, the latest has the highest pmr_id
+					select distinct on (pod.pool_id) pod.ticker_name, ph."view" pool_hash
+					from off_chain_pool_data pod
+					join pool_hash ph on ph.id=pod.pool_id
+					order by pod.pool_id, pod.pmr_id desc
+				) latest
+				order by ticker_name
 				""",
         (rs, rowNum) -> new PoolInfo(rs.getString("ticker_name"), rs.getString("pool_hash")));
   }
