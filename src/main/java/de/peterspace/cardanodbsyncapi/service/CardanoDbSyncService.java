@@ -158,7 +158,8 @@ public class CardanoDbSyncService {
         "CREATE INDEX IF NOT EXISTS ct_idx_ma_owners_policy ON ct_ma_owners (policy);");
 
     log.info("Creating materialized view ct_minswap_pools");
-    if (materializedViewNeedsRebuild("ct_minswap_pools")) {
+    // id_a and id_b identify a row, which a refresh without locking out readers needs
+    if (materializedViewNeedsRebuild("ct_minswap_pools", "id_a")) {
       jdbcTemplate.execute("DROP MATERIALIZED VIEW IF EXISTS ct_minswap_pools CASCADE;");
       jdbcTemplate.execute(
           """
@@ -169,7 +170,9 @@ public class CardanoDbSyncService {
 							mto_a.quantity quantity_a,
 							ma_b."policy" policy_b,
 							ma_b."name" name_b,
-							coalesce(mto_b.quantity, txo.value) quantity_b
+							coalesce(mto_b.quantity, txo.value) quantity_b,
+							mto_a.id id_a,
+							coalesce(mto_b.id, 0) id_b
 						from tx_out txo
 						join ma_tx_out mto_a on mto_a.tx_out_id=txo.id
 						join multi_asset ma_a on ma_a.id=mto_a.ident and ma_a."policy" != decode('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c', 'hex')
@@ -185,15 +188,28 @@ public class CardanoDbSyncService {
     jdbcTemplate.execute(
         "CREATE INDEX IF NOT EXISTS ct_minswap_pools_idx ON ct_minswap_pools (policy_a, name_a);");
 
+    log.info("Creating index ct_minswap_pools_key");
+    jdbcTemplate.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ct_minswap_pools_key ON ct_minswap_pools (id_a, id_b);");
+
     log.info("Indexes created");
   }
 
-  private boolean materializedViewNeedsRebuild(String viewName) {
+  /** A view is rebuilt when it is missing or its definition lacks one of the given parts. */
+  private boolean materializedViewNeedsRebuild(String viewName, String... requiredParts) {
     try {
       String def =
           jdbcTemplate.queryForObject(
               "select pg_get_viewdef(to_regclass('public.' || ?), true)", String.class, viewName);
-      return def == null || !def.contains("consumed_by_tx_id");
+      if (def == null || !def.contains("consumed_by_tx_id")) {
+        return true;
+      }
+      for (String part : requiredParts) {
+        if (!def.contains(part)) {
+          return true;
+        }
+      }
+      return false;
     } catch (DataAccessException e) {
       return true;
     }
