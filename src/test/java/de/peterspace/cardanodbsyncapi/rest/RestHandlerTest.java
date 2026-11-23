@@ -13,6 +13,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -373,6 +374,35 @@ class RestHandlerTest {
         .perform(get("/policy/{policyId}/owners", SAMPLE_POLICY_ID))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray());
+  }
+
+  @Test
+  void getPolicyRoyalties() throws Exception {
+    // its royalty token was the first mint and writes the address in two chunks
+    mockMvc
+        .perform(
+            get(
+                "/policy/{policyId}/royalties",
+                "eead402e47940fa95539e4bd087f5355efd4ba0d67a6fb988caf05a8"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.rate", equalTo("0.05")))
+        .andExpect(
+            jsonPath(
+                "$.address",
+                equalTo(
+                    "addr1q9638h6kw8kezqcywkhxd3exnw7ecgdejmh87alu6scql7ng26wcj59j79qack5kppp9can6wfpvldap0e6zjj4eyv7qy3v77x")))
+        .andExpect(jsonPath("$.firstMint", equalTo(true)));
+  }
+
+  @Test
+  void getPolicyRoyaltiesOfAPolicyWithoutIsEmpty() throws Exception {
+    mockMvc
+        .perform(
+            get(
+                "/policy/{policyId}/royalties",
+                "c225195b211214eda7b4f19a7c92f69f53f8a308f00738ee10af25df"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(""));
   }
 
   @Test

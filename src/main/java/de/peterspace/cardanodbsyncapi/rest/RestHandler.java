@@ -10,6 +10,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
@@ -210,6 +211,15 @@ public class RestHandler {
       @Parameter(example = SAMPLE_FINGERPRINT) @PathVariable String fingerprint)
       throws DecoderException {
     return cardanoDbSyncService.getTokenDetails(fingerprint);
+  }
+
+  @Operation(summary = "Get the CIP-27 royalties of a policy, empty if it defines none")
+  @GetMapping(value = "/policy/{policyId}/royalties")
+  @Cacheable("getPolicyRoyalties")
+  public PolicyRoyalties getPolicyRoyalties(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId)
+      throws DecoderException {
+    return cardanoDbSyncService.getPolicyRoyalties(policyId);
   }
 
   @Operation(summary = "getPoolList")

@@ -21,6 +21,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
@@ -697,6 +698,41 @@ public class CardanoDbSyncService {
     try {
       return jdbcTemplate.queryForObject(
           String.format(query, whereClause), (rs, rowNum) -> toTokenDetails(rs), params);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
+
+  /**
+   * The royalties of a policy: the 777 metadata of the first mint of its token with the empty
+   * name (CIP-27), or null if there is none. Old tokens name the rate "pct" and write the address
+   * as one string instead of chunks.
+   */
+  public PolicyRoyalties getPolicyRoyalties(String policyId) throws DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
+					select
+						coalesce(tm.json->>'rate', tm.json->>'pct') rate
+						,case when jsonb_typeof(tm.json->'addr') = 'array'
+							then (select string_agg(e.value, '' order by e.ordinality) from jsonb_array_elements_text(tm.json->'addr') with ordinality e)
+							else tm.json->>'addr' end address
+						,not exists (
+							select 1 from multi_asset ma_other
+							join ma_tx_mint mtm_other on mtm_other.ident = ma_other.id
+							where ma_other."policy" = ma."policy" and mtm_other.tx_id < mtm.tx_id
+						) first_mint
+					from multi_asset ma
+					join ma_tx_mint mtm on mtm.ident = ma.id
+					join tx_metadata tm on tm.tx_id = mtm.tx_id and tm.key = 777
+					where ma."policy" = ? and ma.name = ''::bytea and mtm.quantity > 0
+					order by mtm.id
+					limit 1
+					""",
+          (rs, rowNum) ->
+              new PolicyRoyalties(
+                  rs.getString("rate"), rs.getString("address"), rs.getBoolean("first_mint")),
+          Hex.decodeHex(policyId));
     } catch (EmptyResultDataAccessException e) {
       return null;
     }
