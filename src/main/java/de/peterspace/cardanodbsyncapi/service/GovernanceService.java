@@ -1,5 +1,6 @@
 package de.peterspace.cardanodbsyncapi.service;
 
+import de.peterspace.cardanodbsyncapi.dto.DRepInfo;
 import de.peterspace.cardanodbsyncapi.dto.GovAction;
 import de.peterspace.cardanodbsyncapi.dto.GovernanceOverview;
 import java.util.List;
@@ -26,6 +27,30 @@ public class GovernanceService {
     List<Long> ids =
         jdbcTemplate.queryForList("select id from " + table + " where \"view\" = ? limit 1", Long.class, view);
     return ids.isEmpty() ? null : ids.get(0);
+  }
+
+  /**
+   * DReps that are registered and have voted or registered recently enough to count as active, the
+   * one with the most ADA behind it first. The two automatic choices are not DReps and are left out.
+   */
+  public List<DRepInfo> getDreps() {
+    return jdbcTemplate.query(
+        """
+				select dh."view" drep_id, dd.amount voting_power
+					,(select d.given_name
+						from drep_registration dr
+						join off_chain_vote_data o on o.voting_anchor_id = dr.voting_anchor_id
+						join off_chain_vote_drep_data d on d.off_chain_vote_data_id = o.id
+						where dr.drep_hash_id = dh.id and d.given_name is not null
+						order by dr.id desc limit 1) drep_name
+				from drep_distr dd
+				join drep_hash dh on dh.id = dd.hash_id
+				where dd.epoch_no = (select max(epoch_no) from drep_distr)
+					and dd.active_until >= dd.epoch_no
+					and dh."view" like 'drep1%'
+				order by dd.amount desc
+				""",
+        (rs, rowNum) -> new DRepInfo(rs.getString("drep_id"), rs.getString("drep_name"), rs.getLong("voting_power")));
   }
 
   /**

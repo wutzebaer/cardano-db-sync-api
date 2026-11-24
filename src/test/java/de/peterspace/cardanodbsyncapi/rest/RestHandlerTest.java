@@ -433,6 +433,16 @@ class RestHandlerTest {
   }
 
   @Test
+  void getDreps() throws Exception {
+    mockMvc
+        .perform(get("/dreps"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(greaterThan(10))))
+        .andExpect(jsonPath("$[*].drepId", everyItem(startsWith("drep1"))))
+        .andExpect(jsonPath("$[*].votingPower", everyItem(numberAtLeast(0))));
+  }
+
+  @Test
   void getGovernance() throws Exception {
     mockMvc
         .perform(get("/governance").param("poolHash", SAMPLE_POOL_ID))

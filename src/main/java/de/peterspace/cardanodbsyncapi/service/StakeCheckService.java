@@ -50,11 +50,24 @@ public class StakeCheckService {
 				,pr.retiring_epoch
 				,coalesce(st.stake, 0) active_stake
 				,coalesce(st.delegators, 0) delegators
+				,odrep."view" operator_drep_id
+				,(select d.given_name
+					from drep_registration dr
+					join off_chain_vote_data o on o.voting_anchor_id = dr.voting_anchor_id
+					join off_chain_vote_drep_data d on d.off_chain_vote_data_id = o.id
+					where dr.drep_hash_id = odrep.id and d.given_name is not null
+					order by dr.id desc limit 1) operator_drep_name
 			from pool_hash ph
 			join lateral (
-				select pu.margin, pu.fixed_cost, pu.pledge, pu.registered_tx_id
+				select pu.margin, pu.fixed_cost, pu.pledge, pu.registered_tx_id, pu.reward_addr_id
 				from pool_update pu where pu.hash_id = ph.id order by pu.id desc limit 1
 			) next_pu on true
+			left join lateral (
+				-- where the account that receives the pool's rewards has delegated its own vote
+				select dh.id, dh."view"
+				from delegation_vote dv join drep_hash dh on dh.id = dv.drep_hash_id
+				where dv.addr_id = next_pu.reward_addr_id order by dv.id desc limit 1
+			) odrep on true
 			left join lateral (
 				select pu.margin, pu.fixed_cost, pu.pledge
 				from pool_update pu where pu.hash_id = ph.id and pu.active_epoch_no <= ? order by pu.id desc limit 1
@@ -111,7 +124,9 @@ public class StakeCheckService {
         rs.getObject("retiring_epoch", Integer.class),
         rs.getLong("active_stake"),
         rs.getInt("delegators"),
-        saturationStake);
+        saturationStake,
+        rs.getString("operator_drep_id"),
+        rs.getString("operator_drep_name"));
   }
 
   public PoolCheck getPoolCheck(String poolHash) {

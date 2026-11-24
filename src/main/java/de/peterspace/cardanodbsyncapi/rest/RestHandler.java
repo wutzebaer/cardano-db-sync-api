@@ -1,6 +1,7 @@
 package de.peterspace.cardanodbsyncapi.rest;
 
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
+import de.peterspace.cardanodbsyncapi.dto.DRepInfo;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
 import de.peterspace.cardanodbsyncapi.dto.GovernanceOverview;
 import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
@@ -58,6 +59,13 @@ public class RestHandler {
   private final CardanoDbSyncService cardanoDbSyncService;
   private final StakeCheckService stakeCheckService;
   private final GovernanceService governanceService;
+
+  @Operation(summary = "Active DReps with their name and the ADA delegated to them, the largest first")
+  @GetMapping(value = "/dreps")
+  @Cacheable("getDreps")
+  public List<DRepInfo> getDreps() {
+    return governanceService.getDreps();
+  }
 
   @Operation(
       summary =

@@ -35,4 +35,13 @@ public class PoolCheck {
 
   /** Lovelace above which a pool earns no more rewards for additional stake. */
   @NotNull long saturationStake;
+
+  /**
+   * The DRep the pool's reward account has delegated its own vote to: a drep1… id,
+   * drep_always_abstain or drep_always_no_confidence. Null without a vote delegation.
+   */
+  String operatorDrepId;
+
+  /** Name that DRep registered with, null if it has none. */
+  String operatorDrepName;
 }
