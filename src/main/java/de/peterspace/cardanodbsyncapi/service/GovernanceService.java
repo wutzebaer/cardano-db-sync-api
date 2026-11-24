@@ -36,21 +36,24 @@ public class GovernanceService {
   public List<DRepInfo> getDreps() {
     return jdbcTemplate.query(
         """
-				select dh."view" drep_id, dd.amount voting_power
-					,(select d.given_name
-						from drep_registration dr
-						join off_chain_vote_data o on o.voting_anchor_id = dr.voting_anchor_id
-						join off_chain_vote_drep_data d on d.off_chain_vote_data_id = o.id
-						where dr.drep_hash_id = dh.id and d.given_name is not null
-						order by dr.id desc limit 1) drep_name
+				select dh."view" drep_id, dd.amount voting_power, m.given_name drep_name
+					-- what the DRep says it stands for, as one short line
+					,left(btrim(regexp_replace(m.objectives, '[[:space:]]+', ' ', 'g')), 240) objectives
 				from drep_distr dd
 				join drep_hash dh on dh.id = dd.hash_id
+				left join lateral (
+					select d.given_name, d.objectives
+					from drep_registration dr
+					join off_chain_vote_data o on o.voting_anchor_id = dr.voting_anchor_id
+					join off_chain_vote_drep_data d on d.off_chain_vote_data_id = o.id
+					where dr.drep_hash_id = dh.id and d.given_name is not null
+					order by dr.id desc limit 1) m on true
 				where dd.epoch_no = (select max(epoch_no) from drep_distr)
 					and dd.active_until >= dd.epoch_no
 					and dh."view" like 'drep1%'
 				order by dd.amount desc
 				""",
-        (rs, rowNum) -> new DRepInfo(rs.getString("drep_id"), rs.getString("drep_name"), rs.getLong("voting_power")));
+        (rs, rowNum) -> new DRepInfo(rs.getString("drep_id"), rs.getString("drep_name"), rs.getString("objectives"), rs.getLong("voting_power")));
   }
 
   /**
