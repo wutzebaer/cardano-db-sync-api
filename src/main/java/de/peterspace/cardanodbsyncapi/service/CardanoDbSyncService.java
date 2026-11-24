@@ -900,6 +900,11 @@ public class CardanoDbSyncService {
   }
 
   public StakeAddress getAddressByHandle(String handle) throws DecoderException {
+    // a newer handle is a CIP-68 asset: its holder owns the name behind the label of the user token
+    byte[] plainName = handle.getBytes(StandardCharsets.UTF_8);
+    byte[] cip68Name = new byte[CIP68_USER_TOKEN.length + plainName.length];
+    System.arraycopy(CIP68_USER_TOKEN, 0, cip68Name, 0, CIP68_USER_TOKEN.length);
+    System.arraycopy(plainName, 0, cip68Name, CIP68_USER_TOKEN.length, plainName.length);
     try {
       return jdbcTemplate.queryForObject(
           """
@@ -910,12 +915,13 @@ public class CardanoDbSyncService {
 					left join stake_address sa on sa.id = txo.stake_address_id
 					where
 					ma."policy"=?
-					and ma.name=?
+					and ma.name in (?, ?)
 					limit 1
 					""",
           (rs, rowNum) -> new StakeAddress(rs.getString("address")),
           handlePolicyBytes,
-          handle.getBytes());
+          plainName,
+          cip68Name);
     } catch (EmptyResultDataAccessException e) {
       return null;
     }
