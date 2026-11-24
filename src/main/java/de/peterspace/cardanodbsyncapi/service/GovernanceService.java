@@ -36,11 +36,35 @@ public class GovernanceService {
   public List<DRepInfo> getDreps() {
     return jdbcTemplate.query(
         """
+				-- the same actions the overview shows: open ones and those that ended within the last epochs
+				with acts as (
+					select gap.id
+					from gov_action_proposal gap
+					where coalesce(gap.enacted_epoch, gap.dropped_epoch, gap.expired_epoch, 999999) >= (select max(epoch_no) from block) - ?
+					order by gap.id desc limit ?
+				),
+				-- a DRep can vote again until an action ends, only the latest vote counts
+				latest as (
+					select distinct on (vp.gov_action_proposal_id, vp.drep_voter) vp.drep_voter, vp.vote::text vote
+					from voting_procedure vp
+					where vp.gov_action_proposal_id in (select id from acts) and vp.drep_voter is not null and vp.invalid is null
+					order by vp.gov_action_proposal_id, vp.drep_voter, vp.id desc
+				),
+				tally as (
+					select drep_voter
+						,count(*) filter (where vote = 'Yes') yes
+						,count(*) filter (where vote = 'No') no
+						,count(*) filter (where vote = 'Abstain') abstain
+					from latest group by drep_voter
+				)
 				select dh."view" drep_id, dd.amount voting_power, m.given_name drep_name
 					-- what the DRep says it stands for, as one short line
 					,left(btrim(regexp_replace(m.objectives, '[[:space:]]+', ' ', 'g')), 240) objectives
+					,coalesce(t.yes, 0) votes_yes, coalesce(t.no, 0) votes_no, coalesce(t.abstain, 0) votes_abstain
+					,(select count(*) from acts) recent_actions
 				from drep_distr dd
 				join drep_hash dh on dh.id = dd.hash_id
+				left join tally t on t.drep_voter = dh.id
 				left join lateral (
 					select d.given_name, d.objectives
 					from drep_registration dr
@@ -53,7 +77,18 @@ public class GovernanceService {
 					and dh."view" like 'drep1%'
 				order by dd.amount desc
 				""",
-        (rs, rowNum) -> new DRepInfo(rs.getString("drep_id"), rs.getString("drep_name"), rs.getString("objectives"), rs.getLong("voting_power")));
+        (rs, rowNum) ->
+            new DRepInfo(
+                rs.getString("drep_id"),
+                rs.getString("drep_name"),
+                rs.getString("objectives"),
+                rs.getLong("voting_power"),
+                rs.getInt("votes_yes"),
+                rs.getInt("votes_no"),
+                rs.getInt("votes_abstain"),
+                rs.getInt("recent_actions")),
+        CLOSED_EPOCHS,
+        MAX_ACTIONS);
   }
 
   /**

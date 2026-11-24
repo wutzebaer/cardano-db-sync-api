@@ -16,4 +16,14 @@ public class DRepInfo {
 
   /** Lovelace delegated to the DRep in the latest snapshot. */
   @NotNull long votingPower;
+
+  /** Votes on the recent governance actions, the latest vote per action. */
+  @NotNull int votesYes;
+
+  @NotNull int votesNo;
+
+  @NotNull int votesAbstain;
+
+  /** How many recent governance actions there are: the open ones and those that ended lately. */
+  @NotNull int recentActions;
 }
