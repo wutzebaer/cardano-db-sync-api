@@ -303,7 +303,9 @@ public class StakeCheckService {
 							where sl.pool_hash_id = ph.id and b.epoch_no = ?) blocks,
 						(select coalesce(sum(es.amount), 0) from epoch_stake es where es.epoch_no = ? and es.pool_id = ph.id) stake,
 						(select count(*) from epoch_stake es where es.epoch_no = ? and es.pool_id = ph.id) delegators,
-						(select coalesce(sum(es.amount), 0) from epoch_stake es where es.epoch_no = ?) total_stake
+						-- db-sync writes a snapshot in parts: until it is complete the sums would be too small
+						(select coalesce(sum(es.amount), 0) from epoch_stake es where es.epoch_no = ?
+							and exists (select 1 from epoch_stake_progress p where p.epoch_no = es.epoch_no and p.completed)) total_stake
 					from pool_hash ph
 					where ph."view" = ?
 					""",
