@@ -122,7 +122,7 @@ public class GovernanceService {
             """
 						with acts as (
 							select gap.id, tx.hash, gap.index, gap.type::text "type", gap.expiration, gap.ratified_epoch, gap.enacted_epoch,
-								gap.dropped_epoch, gap.expired_epoch, gap.voting_anchor_id, gap.description, b.epoch_no submitted_epoch
+								gap.dropped_epoch, gap.expired_epoch, gap.voting_anchor_id, gap.description, b.epoch_no submitted_epoch, b.time submitted_time
 							from gov_action_proposal gap
 							join tx on tx.id = gap.tx_id
 							join block b on b.id = tx.block_id
@@ -138,6 +138,7 @@ public class GovernanceService {
 						)
 						select
 							encode(a.hash, 'hex') tx_hash, a.index, a."type", a.submitted_epoch, a.expiration,
+								extract(epoch from a.submitted_time)::bigint submitted_unix,
 							a.ratified_epoch, a.enacted_epoch, a.dropped_epoch, a.expired_epoch,
 							max(ga.title) title, max(ga.abstract) summary, max(va.url) anchor_url,
 							case when a."type" = 'TreasuryWithdrawals'
@@ -165,7 +166,7 @@ public class GovernanceService {
 							order by ovd.id desc limit 1
 						) ga on true
 						left join latest l on l.gov_action_proposal_id = a.id
-						group by a.id, a.hash, a.index, a."type", a.submitted_epoch, a.expiration, a.ratified_epoch, a.enacted_epoch,
+						group by a.id, a.hash, a.index, a."type", a.submitted_epoch, a.submitted_time, a.expiration, a.ratified_epoch, a.enacted_epoch,
 							a.dropped_epoch, a.expired_epoch, a.description
 						order by a.id desc
 						""",
@@ -194,7 +195,8 @@ public class GovernanceService {
                     rs.getInt("committee_no"),
                     rs.getString("drep_vote"),
                     rs.getString("pool_vote"),
-                    rs.getString("pool_vote_anchor_url")),
+                    rs.getString("pool_vote_anchor_url"),
+                    rs.getLong("submitted_unix")),
             epoch,
             CLOSED_EPOCHS,
             MAX_ACTIONS,

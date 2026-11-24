@@ -56,4 +56,7 @@ public class GovAction {
 
   /** Where the pool explains its vote, null without a rationale. */
   String poolVoteAnchorUrl;
+
+  /** When the action was submitted, in seconds since 1970 (UTC). */
+  @NotNull long submittedUnix;
 }
