@@ -129,6 +129,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getGovernance">
+		<expiry>
+			<ttl unit="minutes">5</ttl>
+		</expiry>
+		<heap unit="entries">100000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getPoolList">
 		<expiry>
 			<ttl unit="hours">1</ttl>

@@ -433,6 +433,17 @@ class RestHandlerTest {
   }
 
   @Test
+  void getGovernance() throws Exception {
+    mockMvc
+        .perform(get("/governance").param("poolHash", SAMPLE_POOL_ID))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.currentEpoch", numberAtLeast(600)))
+        .andExpect(jsonPath("$.actions", hasSize(greaterThan(0))))
+        .andExpect(jsonPath("$.actions[*].txHash", everyItem(matchesPattern("[0-9a-f]{64}"))))
+        .andExpect(jsonPath("$.actions[*].expiresEpoch", everyItem(numberAtLeast(500))));
+  }
+
+  @Test
   void getPolicyRoyalties() throws Exception {
     // its royalty token was the first mint and writes the address in two chunks
     mockMvc

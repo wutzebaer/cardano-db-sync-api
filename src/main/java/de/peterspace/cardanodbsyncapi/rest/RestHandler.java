@@ -2,6 +2,7 @@ package de.peterspace.cardanodbsyncapi.rest;
 
 import de.peterspace.cardanodbsyncapi.dto.AccountStatementRow;
 import de.peterspace.cardanodbsyncapi.dto.EpochStake;
+import de.peterspace.cardanodbsyncapi.dto.GovernanceOverview;
 import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
 import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
@@ -19,6 +20,7 @@ import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
+import de.peterspace.cardanodbsyncapi.service.GovernanceService;
 import de.peterspace.cardanodbsyncapi.service.StakeCheckService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -55,6 +57,20 @@ public class RestHandler {
       "pool180fejev4xgwe2y53ky0pxvgxr3wcvkweu6feq5mdljfzcsmtg6u";
   private final CardanoDbSyncService cardanoDbSyncService;
   private final StakeCheckService stakeCheckService;
+  private final GovernanceService governanceService;
+
+  @Operation(
+      summary =
+          "Open and recently closed governance actions with the votes cast, and how one DRep and one pool voted on each")
+  @GetMapping(value = "/governance")
+  @Cacheable("getGovernance")
+  public GovernanceOverview getGovernance(
+      @Parameter(example = "drep13d6sxkyz6st9h65qqrzd8ukpywhr8swe9f6357qntgjqye0gttd")
+          @RequestParam(required = false)
+          String drepId,
+      @Parameter(example = SAMPLE_POOL_ID) @RequestParam(required = false) String poolHash) {
+    return governanceService.getOverview(drepId, poolHash);
+  }
 
   @Operation(
       summary =
