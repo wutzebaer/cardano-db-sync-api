@@ -433,6 +433,15 @@ class RestHandlerTest {
   }
 
   @Test
+  void getStakeInfoOfADeregisteredAddressIsEmpty() throws Exception {
+    // delegated to a pool and deregistered afterwards
+    mockMvc
+        .perform(get("/{stakeAddress}/stakeInfo", "stake1uytvd9eyqvkyn3hhv8wnrjpkjlmpt246v4g65pw9q7sutdgy26xk7"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(""));
+  }
+
+  @Test
   void getDreps() throws Exception {
     mockMvc
         .perform(get("/dreps"))

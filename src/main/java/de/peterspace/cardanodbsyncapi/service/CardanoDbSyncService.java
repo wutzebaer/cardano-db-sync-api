@@ -752,6 +752,8 @@ public class CardanoDbSyncService {
 							from delegation d
 							join stake_address sa on sa.id=d.addr_id
 							where sa."view"=?
+								-- a deregistration ends the delegation, only what was delegated after it counts
+								and d.tx_id > coalesce((select max(sd.tx_id) from stake_deregistration sd where sd.addr_id=d.addr_id), 0)
 							order by d.id desc
 							limit 1
 							""",
