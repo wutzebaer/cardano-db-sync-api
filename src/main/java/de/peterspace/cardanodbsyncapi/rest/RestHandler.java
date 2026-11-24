@@ -8,6 +8,7 @@ import de.peterspace.cardanodbsyncapi.dto.LiquidityPool;
 import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
+import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
@@ -106,6 +107,17 @@ public class RestHandler {
   public PoolPerformance getPoolPerformance(
       @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash) {
     return stakeCheckService.getPoolPerformance(poolHash);
+  }
+
+  @Operation(
+      summary =
+          "Blocks, stake and delegators of a pool in one epoch and the blocks its stake lets expect. Empty for an unknown pool")
+  @GetMapping(value = "/pool/{poolHash}/epoch/{epoch}")
+  @Cacheable("getPoolEpoch")
+  public PoolEpoch getPoolEpoch(
+      @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash,
+      @Parameter(example = "668") @PathVariable int epoch) {
+    return stakeCheckService.getPoolEpoch(poolHash, epoch);
   }
 
   @Operation(

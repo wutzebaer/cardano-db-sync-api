@@ -2,6 +2,7 @@ package de.peterspace.cardanodbsyncapi.service;
 
 import de.peterspace.cardanodbsyncapi.dto.EpochBlocks;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
+import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
 import java.sql.ResultSet;
@@ -288,5 +289,43 @@ public class StakeCheckService {
             poolId);
 
     return new PoolPerformance(poolHash, fromEpoch, toEpoch, roa, networkRoa, blocks, lifetimeBlocks);
+  }
+
+  /** One slot in twenty has a block (the active slot coefficient) and an epoch has 432,000 slots. */
+  private static final double BLOCKS_PER_EPOCH = 21600;
+
+  public PoolEpoch getPoolEpoch(String poolHash, int epoch) {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
+					select
+						(select count(*) from block b join slot_leader sl on sl.id = b.slot_leader_id
+							where sl.pool_hash_id = ph.id and b.epoch_no = ?) blocks,
+						(select coalesce(sum(es.amount), 0) from epoch_stake es where es.epoch_no = ? and es.pool_id = ph.id) stake,
+						(select count(*) from epoch_stake es where es.epoch_no = ? and es.pool_id = ph.id) delegators,
+						(select coalesce(sum(es.amount), 0) from epoch_stake es where es.epoch_no = ?) total_stake
+					from pool_hash ph
+					where ph."view" = ?
+					""",
+          (rs, rowNum) -> {
+            long stake = rs.getLong("stake");
+            long totalStake = rs.getLong("total_stake");
+            return new PoolEpoch(
+                poolHash,
+                epoch,
+                rs.getInt("blocks"),
+                stake,
+                totalStake,
+                rs.getInt("delegators"),
+                totalStake > 0 ? BLOCKS_PER_EPOCH * stake / totalStake : null);
+          },
+          epoch,
+          epoch,
+          epoch,
+          epoch,
+          poolHash);
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
   }
 }
