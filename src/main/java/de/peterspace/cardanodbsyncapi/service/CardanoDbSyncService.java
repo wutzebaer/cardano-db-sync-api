@@ -22,6 +22,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.PolicyCollection;
+import de.peterspace.cardanodbsyncapi.dto.TokenHolder;
 import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
@@ -849,6 +850,30 @@ public class CardanoDbSyncService {
         (rs, rowNum) -> new EpochStake(rs.getString("stake_address"), rs.getLong("amount")),
         poolHash,
         epoch);
+  }
+
+  /**
+   * Who holds a token right now, read from the unspent outputs: the largest holders first, at most
+   * {@code limit} of them. Outputs of one stake address count as one holder.
+   */
+  public List<TokenHolder> getTokenHolders(String policyId, String assetName, int limit)
+      throws DecoderException {
+    return jdbcTemplate.query(
+        """
+					select coalesce(sa."view", txo.address) address, sum(mto.quantity) quantity
+					from multi_asset ma
+					join ma_tx_out mto on mto.ident=ma.id
+					join tx_out txo on txo.id=mto.tx_out_id and txo.consumed_by_tx_id is null
+					left join stake_address sa on sa.id=txo.stake_address_id
+					where ma."policy"=? and ma.name=?
+					group by coalesce(sa."view", txo.address)
+					order by sum(mto.quantity) desc, coalesce(sa."view", txo.address)
+					limit ?
+					""",
+        (rs, rowNum) -> new TokenHolder(rs.getString("address"), rs.getLong("quantity")),
+        Hex.decodeHex(policyId),
+        Hex.decodeHex(assetName),
+        limit);
   }
 
   public List<OwnerInfo> getOwners(String policyId) throws DecoderException {

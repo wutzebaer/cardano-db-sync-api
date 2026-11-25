@@ -20,6 +20,7 @@ import de.peterspace.cardanodbsyncapi.dto.WalletHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.PolicyCollection;
+import de.peterspace.cardanodbsyncapi.dto.TokenHolder;
 import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
@@ -329,6 +330,19 @@ public class RestHandler {
       @Parameter(example = SAMPLE_ASSET_NAME) @PathVariable(required = false) String assetName)
       throws DecoderException {
     return cardanoDbSyncService.getTokenDetails(policyId, assetName);
+  }
+
+  @Operation(
+      summary =
+          "Get who holds a token right now, the largest holders first, 21 at most. Outputs of one"
+              + " stake address count as one holder")
+  @GetMapping(value = {"/token/{policyId}/{assetName}/holders", "/token/{policyId}//holders"})
+  @Cacheable("getTokenHolders")
+  public List<TokenHolder> getTokenHolders(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId,
+      @Parameter(example = SAMPLE_ASSET_NAME) @PathVariable(required = false) String assetName)
+      throws DecoderException {
+    return cardanoDbSyncService.getTokenHolders(policyId, assetName == null ? "" : assetName, 21);
   }
 
   @Operation(summary = "getTokenDetailsByFingerprint")
