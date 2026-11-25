@@ -27,6 +27,7 @@ import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
 import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
+import de.peterspace.cardanodbsyncapi.dto.WalletHandle;
 import jakarta.annotation.PostConstruct;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -869,57 +870,135 @@ public class CardanoDbSyncService {
         Hex.decodeHex(policyId));
   }
 
-  public List<StakeAddress> getHandles(String stakeAddress) throws DecoderException {
-    return jdbcTemplate.query(
-        """
-					select ma.name assetName
-					from stake_address sa
-					join tx_out txo on txo.stake_address_id=sa.id and txo.consumed_by_tx_id is null
-					join ma_tx_out mto on mto.tx_out_id=txo.id
-					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
-					where sa.view=?
-				""",
-        (rs, rowNum) -> new StakeAddress(new String(rs.getBytes("assetName"))),
-        handlePolicyBytes,
-        stakeAddress);
+  public List<WalletHandle> getHandles(String stakeAddress) {
+    List<HandleCandidate> candidates = handleCandidates(List.of(stakeAddress));
+    if (candidates.isEmpty()) {
+      return List.of();
+    }
+    HandleCandidate defaultHandle = candidates.stream().min(DEFAULT_HANDLE_ORDER).orElseThrow();
+    return candidates.stream()
+        .sorted(DEFAULT_HANDLE_ORDER)
+        .map(candidate -> new WalletHandle(candidate.name(), candidate == defaultHandle))
+        .toList();
   }
 
   /**
-   * One handle per stake address: the shortest, then the alphabetically first. Which handle a
-   * holder picked as default is not on-chain. Stake addresses without a handle are omitted.
+   * The default handle of each stake address, chosen like handle.me does. Stake addresses without a
+   * handle are omitted.
    */
   public List<StakeHandle> getHandlesOfStakeAddresses(List<String> stakeAddresses) {
+    Map<String, HandleCandidate> handles = new TreeMap<>();
+    for (HandleCandidate candidate : handleCandidates(stakeAddresses)) {
+      handles.merge(
+          candidate.stakeAddress(),
+          candidate,
+          (a, b) -> DEFAULT_HANDLE_ORDER.compare(a, b) <= 0 ? a : b);
+    }
+    return handles.values().stream()
+        .map(candidate -> new StakeHandle(candidate.stakeAddress(), candidate.name()))
+        .toList();
+  }
+
+  /**
+   * A handle a stake address holds, with what decides whether it is the default one.
+   *
+   * @param manualDefault the holder set it as default: field "default" in the datum of the
+   *     reference token of a CIP-68 handle
+   * @param og one of the first 2438 handles
+   * @param ogNumber 0 when unknown: legacy handles carry only the flag on-chain, handle.me takes
+   *     their number from a list of its own, so between two legacy OG handles its pick can differ
+   */
+  record HandleCandidate(
+      String stakeAddress,
+      String name,
+      boolean manualDefault,
+      boolean og,
+      long ogNumber,
+      long createdSlot) {}
+
+  /**
+   * The order handle.me picks the default handle of a wallet in: the one the holder set, the lowest
+   * OG number, the shortest, the first minted, the alphabetically first.
+   */
+  static final Comparator<HandleCandidate> DEFAULT_HANDLE_ORDER =
+      Comparator.comparing(HandleCandidate::manualDefault)
+          .thenComparing(HandleCandidate::og)
+          .reversed()
+          .thenComparingLong(
+              candidate -> candidate.ogNumber() > 0 ? candidate.ogNumber() : Long.MAX_VALUE)
+          .thenComparingInt(candidate -> candidate.name().length())
+          .thenComparingLong(HandleCandidate::createdSlot)
+          .thenComparing(HandleCandidate::name);
+
+  private List<HandleCandidate> handleCandidates(List<String> stakeAddresses) {
     if (stakeAddresses.isEmpty()) {
       return List.of();
     }
-    Map<String, String> handles = new TreeMap<>();
+    List<HandleCandidate> candidates = new ArrayList<>();
+    // A CIP-68 handle keeps its data in the inline datum of its reference token (label 100):
+    // fields[0] holds og_number, fields[2] the flag "default" (keys are hex). A legacy handle has
+    // only an OG flag, in the metadata of its mint.
     jdbcTemplate.query(
         """
-					select sa.view stake_address, ma.name asset_name
+					select
+						sa.view stake_address,
+						ma.name asset_name,
+						coalesce(ref.value->'fields'->2->'map'
+							@> '[{"k":{"bytes":"64656661756c74"},"v":{"int":1}}]'::jsonb, false) manual_default,
+						coalesce(
+							(select (e->'v'->>'int')::bigint
+							from jsonb_array_elements(ref.value->'fields'->0->'map') e
+							where e->'k'->>'bytes' = '6f675f6e756d626572'
+							limit 1),
+							0) og_number,
+						coalesce(mint.og, false) og,
+						coalesce(mint.slot_no, 0) created_slot
 					from stake_address sa
 					join tx_out txo on txo.stake_address_id=sa.id and txo.consumed_by_tx_id is null
 					join ma_tx_out mto on mto.tx_out_id=txo.id
 					join multi_asset ma on ma.id=mto.ident and ma."policy"=?
+					left join lateral (
+						select d.value
+						from multi_asset r
+						join ma_tx_out rmto on rmto.ident=r.id
+						join tx_out rtxo on rtxo.id=rmto.tx_out_id and rtxo.consumed_by_tx_id is null
+						join datum d on d.id=rtxo.inline_datum_id
+						where r."policy"=ma."policy" and r.name=decode('000643b0', 'hex') || substring(ma.name from 5)
+						limit 1
+					) ref on substring(ma.name from 1 for 4)=decode('000de140', 'hex')
+					left join lateral (
+						select
+							b.slot_no,
+							case when get_byte(ma.name, 0) <> 0 then
+								tm.json->encode(ma."policy", 'hex')->convert_from(ma.name, 'UTF8')->'core'->>'og' = '1'
+							end og
+						from ma_tx_mint mtm
+						join tx t on t.id=mtm.tx_id
+						join block b on b.id=t.block_id
+						left join tx_metadata tm on tm.tx_id=t.id and tm.key=721
+						where mtm.ident=ma.id and mtm.quantity > 0
+						order by b.slot_no
+						limit 1
+					) mint on true
 					where sa.view = any(?)
 					""",
         rs -> {
-          String handle = handleName(rs.getBytes("asset_name"));
-          if (handle != null) {
-            handles.merge(
-                rs.getString("stake_address"),
-                handle,
-                (a, b) -> HANDLE_ORDER.compare(a, b) <= 0 ? a : b);
+          String name = handleName(rs.getBytes("asset_name"));
+          if (name != null) {
+            candidates.add(
+                new HandleCandidate(
+                    rs.getString("stake_address"),
+                    name,
+                    rs.getBoolean("manual_default"),
+                    rs.getBoolean("og") || rs.getLong("og_number") > 0,
+                    rs.getLong("og_number"),
+                    rs.getLong("created_slot")));
           }
         },
         handlePolicyBytes,
         (Object) stakeAddresses.toArray(String[]::new));
-    return handles.entrySet().stream()
-        .map(entry -> new StakeHandle(entry.getKey(), entry.getValue()))
-        .toList();
+    return candidates;
   }
-
-  private static final Comparator<String> HANDLE_ORDER =
-      Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder());
 
   /** CIP-67 label 222, the token a holder owns of a CIP-68 handle */
   private static final byte[] CIP68_USER_TOKEN = {0x00, 0x0d, (byte) 0xe1, 0x40};

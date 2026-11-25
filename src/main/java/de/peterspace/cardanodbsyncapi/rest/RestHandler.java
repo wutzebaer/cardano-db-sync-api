@@ -15,6 +15,7 @@ import de.peterspace.cardanodbsyncapi.dto.ScriptOutput;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
+import de.peterspace.cardanodbsyncapi.dto.WalletHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.PolicyCollection;
@@ -271,12 +272,13 @@ public class RestHandler {
     return cardanoDbSyncService.getStatement(address);
   }
 
-  @Operation(summary = "Get all handles from a stakeAddress")
+  @Operation(
+      summary =
+          "Get all handles from a stakeAddress, the default one first and marked with default=true")
   @GetMapping(value = "/{stakeAddress}/handles")
   @Cacheable("getHandles")
-  public List<StakeAddress> getHandles(
-      @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress)
-      throws DecoderException {
+  public List<WalletHandle> getHandles(
+      @Parameter(example = SAMPLE_STAKE_ADDRESS) @PathVariable String stakeAddress) {
     return cardanoDbSyncService.getHandles(stakeAddress);
   }
 

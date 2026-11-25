@@ -257,7 +257,9 @@ class RestHandlerTest {
         .perform(get("/{stakeAddress}/handles", SAMPLE_STAKE_ADDRESS))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
-        .andExpect(jsonPath("$[*].address", everyItem(not(emptyOrNullString()))));
+        .andExpect(jsonPath("$[*].address", hasItem("chien-pool")))
+        .andExpect(jsonPath("$[0].default", equalTo(true)))
+        .andExpect(jsonPath("$[?(@.default == true)]", hasSize(1)));
   }
 
   @Test
