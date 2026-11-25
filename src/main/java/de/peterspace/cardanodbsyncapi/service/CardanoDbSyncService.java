@@ -21,6 +21,7 @@ import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.PolicyCollection;
 import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
@@ -732,6 +733,48 @@ public class CardanoDbSyncService {
           (rs, rowNum) ->
               new PolicyRoyalties(
                   rs.getString("rate"), rs.getString("address"), rs.getBoolean("first_mint")),
+          Hex.decodeHex(policyId));
+    } catch (EmptyResultDataAccessException e) {
+      return null;
+    }
+  }
+
+  /**
+   * The collection a policy registered with CIP-88: the 867 metadata of a transaction that minted
+   * its token with the empty name, which only the owner of the policy can do (validation method 1,
+   * the token as beacon). The registration has to name this policy and this token. Of several the
+   * one with the highest nonce counts. Null if there is none or it has no name. Description and
+   * image are written in pieces of 64 bytes, which are put together here.
+   */
+  public PolicyCollection getPolicyCollection(String policyId) throws DecoderException {
+    try {
+      return jdbcTemplate.queryForObject(
+          """
+					select
+						c.details ->> '0' name
+						,case jsonb_typeof(c.details -> '1')
+							when 'array' then (select string_agg(e.value, '' order by e.ordinality) from jsonb_array_elements_text(c.details -> '1') with ordinality e)
+							when 'string' then c.details ->> '1' end description
+						,case jsonb_typeof(c.details -> '2')
+							when 'array' then (select string_agg(e.value, '' order by e.ordinality) from jsonb_array_elements_text(c.details -> '2') with ordinality e)
+							when 'string' then c.details ->> '2' end image
+					from multi_asset ma
+					join ma_tx_mint mtm on mtm.ident = ma.id
+					join tx_metadata tm on tm.tx_id = mtm.tx_id and tm.key = 867
+					cross join lateral (select coalesce(tm.json #> '{1,6,25,1}', tm.json #> '{1,6,68,1}') details) c
+					where ma."policy" = ? and ma.name = ''::bytea and mtm.quantity > 0
+						and tm.json #>> '{1,1,0}' = '0'
+						and tm.json #>> '{1,1,1}' = '0x' || encode(ma."policy", 'hex')
+						and tm.json #>> '{1,3,0}' = '1'
+						and tm.json #>> '{1,3,1,0}' = '0x' || encode(ma."policy", 'hex')
+						and tm.json #>> '{1,3,1,1}' in ('0x', '')
+						and jsonb_typeof(c.details -> '0') = 'string'
+					order by case when tm.json #>> '{1,4}' ~ '^[0-9]{1,18}$' then (tm.json #>> '{1,4}')::bigint else -1 end desc, mtm.id desc
+					limit 1
+					""",
+          (rs, rowNum) ->
+              new PolicyCollection(
+                  rs.getString("name"), rs.getString("description"), rs.getString("image")),
           Hex.decodeHex(policyId));
     } catch (EmptyResultDataAccessException e) {
       return null;

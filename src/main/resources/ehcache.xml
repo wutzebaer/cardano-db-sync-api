@@ -193,6 +193,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getPolicyCollection">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getAddressByHandle">
 		<expiry>
 			<ttl unit="minutes">1</ttl>
@@ -254,6 +262,30 @@
 			<ttl unit="minutes">1</ttl>
 		</expiry>
 		<heap unit="entries">1000000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
+	<cache alias="getScriptOutputs">
+		<expiry>
+			<ttl unit="seconds">5</ttl>
+		</expiry>
+		<heap unit="entries">10000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
+	<cache alias="getScriptFirstOutputs">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">10000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
+	<cache alias="getPlutusV3CostModel">
+		<expiry>
+			<ttl unit="minutes">10</ttl>
+		</expiry>
+		<heap unit="entries">10</heap>
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 

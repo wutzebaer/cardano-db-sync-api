@@ -11,11 +11,13 @@ import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.ScriptOutput;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
 import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
 import de.peterspace.cardanodbsyncapi.dto.StakeHandle;
 import de.peterspace.cardanodbsyncapi.dto.StakeInfo;
 import de.peterspace.cardanodbsyncapi.dto.StakeReturnAddress;
+import de.peterspace.cardanodbsyncapi.dto.PolicyCollection;
 import de.peterspace.cardanodbsyncapi.dto.PolicyRoyalties;
 import de.peterspace.cardanodbsyncapi.dto.TokenDetails;
 import de.peterspace.cardanodbsyncapi.dto.TokenListItem;
@@ -23,6 +25,7 @@ import de.peterspace.cardanodbsyncapi.dto.TxOut;
 import de.peterspace.cardanodbsyncapi.dto.Utxo;
 import de.peterspace.cardanodbsyncapi.service.CardanoDbSyncService;
 import de.peterspace.cardanodbsyncapi.service.GovernanceService;
+import de.peterspace.cardanodbsyncapi.service.ScriptService;
 import de.peterspace.cardanodbsyncapi.service.StakeCheckService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -60,6 +63,38 @@ public class RestHandler {
   private final CardanoDbSyncService cardanoDbSyncService;
   private final StakeCheckService stakeCheckService;
   private final GovernanceService governanceService;
+  private final ScriptService scriptService;
+
+  @Operation(
+      summary =
+          "Unspent outputs at a script that hold a token of the script's own policy whose name starts with the prefix, with their inline datum. One row for the ADA of an output and one per token")
+  @GetMapping(value = "/script/{scriptHash}/outputs")
+  @Cacheable("getScriptOutputs")
+  public List<ScriptOutput> getScriptOutputs(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String scriptHash,
+      @Parameter(description = "Start of the token name as hex", example = "677270") @RequestParam
+          String namePrefix)
+      throws DecoderException {
+    return scriptService.getOutputs(scriptHash, namePrefix);
+  }
+
+  @Operation(
+      summary =
+          "Outputs of the first transaction that paid to a script, spent or not, with their inline datum")
+  @GetMapping(value = "/script/{scriptHash}/firstOutputs")
+  @Cacheable("getScriptFirstOutputs")
+  public List<ScriptOutput> getScriptFirstOutputs(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String scriptHash)
+      throws DecoderException {
+    return scriptService.getFirstOutputs(scriptHash);
+  }
+
+  @Operation(summary = "The Plutus V3 cost model of the current epoch")
+  @GetMapping(value = "/costModel/plutusV3")
+  @Cacheable("getPlutusV3CostModel")
+  public List<Long> getPlutusV3CostModel() throws Exception {
+    return scriptService.getPlutusV3CostModel();
+  }
 
   @Operation(summary = "Active DReps with their name and the ADA delegated to them, the largest first")
   @GetMapping(value = "/dreps")
@@ -300,6 +335,16 @@ public class RestHandler {
       @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId)
       throws DecoderException {
     return cardanoDbSyncService.getPolicyRoyalties(policyId);
+  }
+
+  @Operation(
+      summary = "Get the collection a policy registered on chain (CIP-88), empty if it did not")
+  @GetMapping(value = "/policy/{policyId}/collection")
+  @Cacheable("getPolicyCollection")
+  public PolicyCollection getPolicyCollection(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String policyId)
+      throws DecoderException {
+    return cardanoDbSyncService.getPolicyCollection(policyId);
   }
 
   @Operation(summary = "getPoolList")
