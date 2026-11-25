@@ -257,7 +257,7 @@ class RestHandlerTest {
         .perform(get("/{stakeAddress}/handles", SAMPLE_STAKE_ADDRESS))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$").isArray())
-        .andExpect(jsonPath("$[*].address", hasItem("chien-pool")))
+        .andExpect(jsonPath("$[*].address", hasItem("cardano-tools")))
         .andExpect(jsonPath("$[0].default", equalTo(true)))
         .andExpect(jsonPath("$[?(@.default == true)]", hasSize(1)));
   }
