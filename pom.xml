@@ -10,7 +10,7 @@
     </parent>
     <groupId>de.peterspace</groupId>
     <artifactId>cardano-db-sync-api</artifactId>
-    <version>1.12.0</version>
+    <version>1.13.0</version>
     <name>cardano-db-sync-api</name>
     <description>Webapi for cardano-db-sync</description>
 
