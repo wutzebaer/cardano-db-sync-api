@@ -121,6 +121,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getPoolEpochFacts">
+		<expiry>
+			<ttl unit="minutes">30</ttl>
+		</expiry>
+		<heap unit="entries">1000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getPoolEpoch">
 		<expiry>
 			<ttl unit="minutes">10</ttl>

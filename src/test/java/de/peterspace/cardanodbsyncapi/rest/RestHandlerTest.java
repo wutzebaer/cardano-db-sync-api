@@ -425,6 +425,17 @@ class RestHandlerTest {
   }
 
   @Test
+  void getPoolEpochFacts() throws Exception {
+    mockMvc
+        .perform(get("/pool/{poolHash}/epoch/{epoch}/facts", SAMPLE_POOL_ID, 669))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.poolHash", equalTo(SAMPLE_POOL_ID)))
+        .andExpect(jsonPath("$.networkBlocks", numberAtLeast(1)))
+        .andExpect(jsonPath("$.rankedPools", numberAtLeast(1)))
+        .andExpect(jsonPath("$.lifetimeBlocks", numberAtLeast(0)));
+  }
+
+  @Test
   void getBlockFrom() throws Exception {
     mockMvc
         .perform(get("/block/from/{slot}", 175000000))

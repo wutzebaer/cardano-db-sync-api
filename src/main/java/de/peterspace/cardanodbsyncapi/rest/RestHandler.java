@@ -9,6 +9,7 @@ import de.peterspace.cardanodbsyncapi.dto.OwnerInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
+import de.peterspace.cardanodbsyncapi.dto.PoolEpochFacts;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.SlotBlock;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
@@ -165,6 +166,17 @@ public class RestHandler {
   @Cacheable("getBlockFrom")
   public SlotBlock getBlockFrom(@Parameter(example = "175000000") @PathVariable long slot) {
     return stakeCheckService.getBlockFrom(slot);
+  }
+
+  @Operation(
+      summary =
+          "Numbers around one epoch of a pool: what its blocks carried, its history and its place among the pools. Empty for an unknown pool")
+  @GetMapping(value = "/pool/{poolHash}/epoch/{epoch}/facts")
+  @Cacheable("getPoolEpochFacts")
+  public PoolEpochFacts getPoolEpochFacts(
+      @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash,
+      @Parameter(example = "668") @PathVariable int epoch) {
+    return stakeCheckService.getPoolEpochFacts(poolHash, epoch);
   }
 
   @Operation(

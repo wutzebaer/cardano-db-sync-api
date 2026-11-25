@@ -3,6 +3,7 @@ package de.peterspace.cardanodbsyncapi.service;
 import de.peterspace.cardanodbsyncapi.dto.EpochBlocks;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
+import de.peterspace.cardanodbsyncapi.dto.PoolEpochFacts;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
 import de.peterspace.cardanodbsyncapi.dto.SlotBlock;
 import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
@@ -358,5 +359,137 @@ public class StakeCheckService {
                     rs.getString("ticker")),
             slot);
     return blocks.isEmpty() ? null : blocks.get(0);
+  }
+
+  /**
+   * Numbers around one epoch of a pool: what its blocks carried, its history and its place among
+   * the pools. Several small queries, together they are far faster than one. Null for an unknown
+   * pool.
+   */
+  public PoolEpochFacts getPoolEpochFacts(String poolHash, int epoch) {
+    List<Long> poolIds =
+        jdbcTemplate.queryForList(
+            "select id from pool_hash where \"view\" = ?", Long.class, poolHash);
+    if (poolIds.isEmpty()) {
+      return null;
+    }
+    long poolId = poolIds.get(0);
+    PoolEpochFacts.PoolEpochFactsBuilder facts =
+        PoolEpochFacts.builder().poolHash(poolHash).epoch(epoch);
+
+    List<Long> txIds = new ArrayList<>();
+    jdbcTemplate.query(
+        """
+				select count(distinct b.id) blocks, count(tx.id) transactions,
+					coalesce(sum(tx.out_sum), 0) moved, coalesce(sum(tx.fee), 0) fees, max(tx.out_sum) largest,
+					max(b.block_no) last_block_no,
+					avg(b.size)::float / (select max_block_size from epoch_param where epoch_no = ?) fill,
+					array_remove(array_agg(tx.id), null) tx_ids
+				from block b
+				join slot_leader sl on sl.id = b.slot_leader_id
+				left join tx on tx.block_id = b.id
+				where sl.pool_hash_id = ? and b.epoch_no = ?
+				""",
+        rs -> {
+          facts
+              .blocks(rs.getInt("blocks"))
+              .transactions(rs.getLong("transactions"))
+              .lovelaceMoved(rs.getLong("moved"))
+              .fees(rs.getLong("fees"))
+              .largestTransaction(rs.getObject("largest") == null ? null : rs.getLong("largest"))
+              .lastBlockNo(
+                  rs.getObject("last_block_no") == null ? null : rs.getLong("last_block_no"))
+              .blockFill(rs.getObject("fill") == null ? null : rs.getDouble("fill"));
+          for (Long id : (Long[]) rs.getArray("tx_ids").getArray()) {
+            txIds.add(id);
+          }
+        },
+        epoch,
+        poolId,
+        epoch);
+
+    if (txIds.isEmpty()) {
+      facts.tokenOutputs(0).scriptRuns(0).tokensMinted(0);
+    } else {
+      Long[] ids = txIds.toArray(Long[]::new);
+      facts
+          .tokenOutputs(
+              jdbcTemplate.queryForObject(
+                  "select count(*) from ma_tx_out mto join tx_out o on o.id = mto.tx_out_id where o.tx_id = any(?)",
+                  Long.class,
+                  (Object) ids))
+          // redeemer has no index on tx_id: a scan of about a second, the result is cached
+          .scriptRuns(
+              jdbcTemplate.queryForObject(
+                  "select count(*) from redeemer where tx_id = any(?)", Long.class, (Object) ids))
+          .tokensMinted(
+              jdbcTemplate.queryForObject(
+                  "select count(*) from ma_tx_mint where tx_id = any(?) and quantity > 0",
+                  Long.class,
+                  (Object) ids));
+    }
+
+    jdbcTemplate.query(
+        """
+				select
+					(select count(*) from block where epoch_no = ?) network_blocks,
+					(select min(active_epoch_no) from pool_update where hash_id = ?) registered_epoch,
+					(select coalesce(sum(amount), 0) from epoch_stake where epoch_no = ? and pool_id = ?) previous_stake,
+					(select count(*) from epoch_stake where epoch_no = ? and pool_id = ?) previous_delegators,
+					(select coalesce(sum(amount), 0) from reward where pool_id = ? and type = 'member') delegator_rewards
+				""",
+        rs -> {
+          facts
+              .networkBlocks(rs.getLong("network_blocks"))
+              .registeredEpoch(
+                  rs.getObject("registered_epoch") == null ? null : rs.getInt("registered_epoch"))
+              .previousStake(rs.getLong("previous_stake"))
+              .previousDelegators(rs.getInt("previous_delegators"))
+              .delegatorRewards(rs.getLong("delegator_rewards"));
+        },
+        epoch,
+        poolId,
+        epoch - 1,
+        poolId,
+        epoch - 1,
+        poolId,
+        poolId);
+
+    // blocks per epoch of the pool's life, for the total, the epochs with a block and the streak
+    TreeMap<Integer, Long> blocksPerEpoch = new TreeMap<>();
+    jdbcTemplate.query(
+        """
+				select b.epoch_no, count(*) blocks from block b join slot_leader sl on sl.id = b.slot_leader_id
+				where sl.pool_hash_id = ? and b.epoch_no <= ? group by b.epoch_no
+				""",
+        rs -> {
+          blocksPerEpoch.put(rs.getInt("epoch_no"), rs.getLong("blocks"));
+        },
+        poolId,
+        epoch);
+    int streak = 0;
+    while (blocksPerEpoch.containsKey(epoch - streak)) {
+      streak++;
+    }
+    facts
+        .lifetimeBlocks(blocksPerEpoch.values().stream().mapToLong(Long::longValue).sum())
+        .epochsWithBlocks(blocksPerEpoch.size())
+        .blockStreak(streak);
+
+    jdbcTemplate.query(
+        """
+				with x as (select pool_id, sum(amount) s from epoch_stake where epoch_no = ? group by pool_id)
+				select (select count(*) from x) pools,
+					(select count(*) + 1 from x where s > (select s from x where pool_id = ?)) place,
+					exists (select 1 from x where pool_id = ?) staked
+				""",
+        rs -> {
+          facts.rankedPools(rs.getInt("pools"));
+          facts.stakeRank(rs.getBoolean("staked") ? rs.getInt("place") : null);
+        },
+        epoch,
+        poolId,
+        poolId);
+    return facts.build();
   }
 }
