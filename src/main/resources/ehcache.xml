@@ -113,6 +113,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getBlockFrom">
+		<expiry>
+			<ttl unit="minutes">1</ttl>
+		</expiry>
+		<heap unit="entries">1000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getPoolEpoch">
 		<expiry>
 			<ttl unit="minutes">10</ttl>

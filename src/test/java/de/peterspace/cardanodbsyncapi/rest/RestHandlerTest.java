@@ -425,6 +425,16 @@ class RestHandlerTest {
   }
 
   @Test
+  void getBlockFrom() throws Exception {
+    mockMvc
+        .perform(get("/block/from/{slot}", 175000000))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.slot", numberAtLeast(175000000)))
+        .andExpect(jsonPath("$.blockNo", numberAtLeast(1)))
+        .andExpect(jsonPath("$.poolHash", startsWith("pool1")));
+  }
+
+  @Test
   void getPoolAlternatives() throws Exception {
     mockMvc
         .perform(get("/poolAlternatives"))

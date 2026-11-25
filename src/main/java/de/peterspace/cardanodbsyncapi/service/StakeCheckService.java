@@ -4,6 +4,7 @@ import de.peterspace.cardanodbsyncapi.dto.EpochBlocks;
 import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
+import de.peterspace.cardanodbsyncapi.dto.SlotBlock;
 import de.peterspace.cardanodbsyncapi.dto.StakeCheck;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -329,5 +330,33 @@ public class StakeCheckService {
     } catch (EmptyResultDataAccessException e) {
       return null;
     }
+  }
+
+  /**
+   * The first block in or after a slot. When a pool was leader in the slot and its block is not on
+   * the chain, this block took the height the pool's block would have had: in the same slot it won
+   * a slot battle, in a later slot a height battle.
+   */
+  public SlotBlock getBlockFrom(long slot) {
+    List<SlotBlock> blocks =
+        jdbcTemplate.query(
+            """
+				select b.slot_no, b.block_no, ph."view" pool_hash,
+					(select pod.ticker_name from off_chain_pool_data pod where pod.pool_id = ph.id order by pod.pmr_id desc limit 1) ticker
+				from block b
+				join slot_leader sl on sl.id = b.slot_leader_id
+				left join pool_hash ph on ph.id = sl.pool_hash_id
+				where b.slot_no >= ?
+				order by b.slot_no
+				limit 1
+				""",
+            (rs, rowNum) ->
+                new SlotBlock(
+                    rs.getLong("slot_no"),
+                    rs.getLong("block_no"),
+                    rs.getString("pool_hash"),
+                    rs.getString("ticker")),
+            slot);
+    return blocks.isEmpty() ? null : blocks.get(0);
   }
 }

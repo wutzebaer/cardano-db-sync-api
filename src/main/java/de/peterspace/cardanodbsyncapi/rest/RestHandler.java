@@ -10,6 +10,7 @@ import de.peterspace.cardanodbsyncapi.dto.PoolCheck;
 import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
+import de.peterspace.cardanodbsyncapi.dto.SlotBlock;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.ScriptOutput;
 import de.peterspace.cardanodbsyncapi.dto.StakeAddress;
@@ -154,6 +155,15 @@ public class RestHandler {
       @Parameter(example = SAMPLE_POOL_ID) @PathVariable String poolHash,
       @Parameter(example = "668") @PathVariable int epoch) {
     return stakeCheckService.getPoolEpoch(poolHash, epoch);
+  }
+
+  @Operation(
+      summary =
+          "The first block in or after a slot and the pool that made it. Empty while the chain has not reached the slot")
+  @GetMapping(value = "/block/from/{slot}")
+  @Cacheable("getBlockFrom")
+  public SlotBlock getBlockFrom(@Parameter(example = "175000000") @PathVariable long slot) {
+    return stakeCheckService.getBlockFrom(slot);
   }
 
   @Operation(
