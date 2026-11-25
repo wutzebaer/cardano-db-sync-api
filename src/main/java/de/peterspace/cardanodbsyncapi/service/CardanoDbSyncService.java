@@ -743,7 +743,9 @@ public class CardanoDbSyncService {
   /**
    * The collection a policy registered with CIP-88: the 867 metadata of a transaction that minted
    * its token with the empty name, which only the owner of the policy can do (validation method 1,
-   * the token as beacon). The registration has to name this policy and this token. Of several the
+   * the token as beacon). The registration has to name this policy and this token. Its scope is 0,
+   * a native script as the standard defines it, or 1, which cardano-tools.io writes for a policy
+   * that is a Plutus contract and for which the standard has no scope yet. Of several the
    * one with the highest nonce counts. Null if there is none or it has no name. Description and
    * image are written in pieces of 64 bytes, which are put together here.
    */
@@ -764,7 +766,7 @@ public class CardanoDbSyncService {
 					join tx_metadata tm on tm.tx_id = mtm.tx_id and tm.key = 867
 					cross join lateral (select coalesce(tm.json #> '{1,6,25,1}', tm.json #> '{1,6,68,1}') details) c
 					where ma."policy" = ? and ma.name = ''::bytea and mtm.quantity > 0
-						and tm.json #>> '{1,1,0}' = '0'
+						and tm.json #>> '{1,1,0}' in ('0', '1')
 						and tm.json #>> '{1,1,1}' = '0x' || encode(ma."policy", 'hex')
 						and tm.json #>> '{1,3,0}' = '1'
 						and tm.json #>> '{1,3,1,0}' = '0x' || encode(ma."policy", 'hex')
