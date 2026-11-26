@@ -297,6 +297,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getScriptMintedNames">
+		<expiry>
+			<ttl unit="seconds">30</ttl>
+		</expiry>
+		<heap unit="entries">10000</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getScriptFirstOutputs">
 		<expiry>
 			<ttl unit="minutes">1</ttl>

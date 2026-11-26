@@ -110,6 +110,31 @@ public class ScriptService {
         script);
   }
 
+  /** Names a contract reads at most at once, a drop holds up to 10,000 tokens. */
+  private static final int MAX_MINTED_NAMES = 20000;
+
+  /**
+   * The names (hex) of all tokens ever minted under the policy of a script that start with the
+   * prefix, burned ones included. A contract that mints a token when it is sold can tell from them
+   * what was sold, also after the outputs that kept track of it are gone.
+   */
+  public List<String> getMintedNames(String scriptHash, String namePrefix) throws DecoderException {
+    byte[] prefix = Hex.decodeHex(namePrefix);
+    return jdbcTemplate.query(
+        """
+				select ma."name"
+				from multi_asset ma
+				where ma."policy" = ? and substring(ma."name" from 1 for ?) = ?
+				order by ma."name"
+				limit ?
+				""",
+        (rs, rowNum) -> Hex.encodeHexString(rs.getBytes("name")),
+        Hex.decodeHex(scriptHash),
+        prefix.length,
+        prefix,
+        MAX_MINTED_NAMES);
+  }
+
   /** The Plutus V3 cost model of the current epoch, which a transaction that runs a script commits to. */
   public List<Long> getPlutusV3CostModel() throws Exception {
     String costs =

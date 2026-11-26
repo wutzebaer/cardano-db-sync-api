@@ -93,6 +93,20 @@ public class RestHandler {
     return scriptService.getFirstOutputs(scriptHash);
   }
 
+  @Operation(
+      summary =
+          "Names (hex) of all tokens ever minted under the policy of a script that start with the prefix, burned ones included")
+  @GetMapping(value = "/script/{scriptHash}/mintedNames")
+  @Cacheable("getScriptMintedNames")
+  public List<String> getScriptMintedNames(
+      @Parameter(example = SAMPLE_POLICY_ID) @PathVariable String scriptHash,
+      @Parameter(description = "Start of the token name as hex", example = "000de140")
+          @RequestParam
+          String namePrefix)
+      throws DecoderException {
+    return scriptService.getMintedNames(scriptHash, namePrefix);
+  }
+
   @Operation(summary = "The Plutus V3 cost model of the current epoch")
   @GetMapping(value = "/costModel/plutusV3")
   @Cacheable("getPlutusV3CostModel")
