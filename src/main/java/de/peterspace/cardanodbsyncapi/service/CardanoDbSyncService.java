@@ -855,10 +855,28 @@ public class CardanoDbSyncService {
   /**
    * Who holds a token right now, read from the unspent outputs: the largest holders first, at most
    * {@code limit} of them. Outputs of one stake address count as one holder.
+   *
+   * <p>The query walks every output the token was ever in, which takes minutes for a token that is
+   * traded a lot. It is given a few seconds and cancelled after that: such a token answers with an
+   * empty list instead of keeping the database busy.
    */
   public List<TokenHolder> getTokenHolders(String policyId, String assetName, int limit)
       throws DecoderException {
-    return jdbcTemplate.query(
+    JdbcTemplate limited = new JdbcTemplate(jdbcTemplate.getDataSource());
+    limited.setQueryTimeout(TOKEN_HOLDERS_SECONDS);
+    try {
+      return queryTokenHolders(limited, policyId, assetName, limit);
+    } catch (DataAccessException e) {
+      log.info("Holders of {}.{} not read: {}", policyId, assetName, e.getMostSpecificCause().getMessage());
+      return List.of();
+    }
+  }
+
+  private static final int TOKEN_HOLDERS_SECONDS = 4;
+
+  private List<TokenHolder> queryTokenHolders(
+      JdbcTemplate limited, String policyId, String assetName, int limit) throws DecoderException {
+    return limited.query(
         """
 					select coalesce(sa."view", txo.address) address, sum(mto.quantity) quantity
 					from multi_asset ma
