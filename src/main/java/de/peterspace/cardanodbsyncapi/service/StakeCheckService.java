@@ -400,8 +400,12 @@ public class StakeCheckService {
               .lastBlockNo(
                   rs.getObject("last_block_no") == null ? null : rs.getLong("last_block_no"))
               .blockFill(rs.getObject("fill") == null ? null : rs.getDouble("fill"));
-          for (Long id : (Long[]) rs.getArray("tx_ids").getArray()) {
-            txIds.add(id);
+          // without a block of the pool the aggregate has no rows and the array is null
+          java.sql.Array ids = rs.getArray("tx_ids");
+          if (ids != null) {
+            for (Long id : (Long[]) ids.getArray()) {
+              txIds.add(id);
+            }
           }
         },
         epoch,

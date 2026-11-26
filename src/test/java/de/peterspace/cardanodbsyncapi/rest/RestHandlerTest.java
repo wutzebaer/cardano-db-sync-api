@@ -436,6 +436,16 @@ class RestHandlerTest {
   }
 
   @Test
+  void getPoolEpochFactsWithoutBlock() throws Exception {
+    // the sample pool made no block in epoch 668
+    mockMvc
+        .perform(get("/pool/{poolHash}/epoch/{epoch}/facts", SAMPLE_POOL_ID, 668))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.blocks", equalTo(0)))
+        .andExpect(jsonPath("$.transactions", equalTo(0)));
+  }
+
+  @Test
   void getBlockFrom() throws Exception {
     mockMvc
         .perform(get("/block/from/{slot}", 175000000))
