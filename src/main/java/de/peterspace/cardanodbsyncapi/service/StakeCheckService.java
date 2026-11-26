@@ -422,7 +422,7 @@ public class StakeCheckService {
                   "select count(*) from ma_tx_out mto join tx_out o on o.id = mto.tx_out_id where o.tx_id = any(?)",
                   Long.class,
                   (Object) ids))
-          // redeemer has no index on tx_id: a scan of about a second, the result is cached
+          // fast through ct_idx_redeemer_tx_id
           .scriptRuns(
               jdbcTemplate.queryForObject(
                   "select count(*) from redeemer where tx_id = any(?)", Long.class, (Object) ids))

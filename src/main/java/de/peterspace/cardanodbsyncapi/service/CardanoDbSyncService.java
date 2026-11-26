@@ -101,6 +101,12 @@ public class CardanoDbSyncService {
     log.info("Creating index ct_idx_pool_hash_view");
     jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS ct_idx_pool_hash_view ON pool_hash (view);");
 
+    // smart contract runs of the transactions in a pool's blocks; db-sync has no index on tx_id.
+    // On a filled database build it first by hand with CREATE INDEX CONCURRENTLY: here it would
+    // hold db-sync up for about a minute
+    log.info("Creating index ct_idx_redeemer_tx_id");
+    jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS ct_idx_redeemer_tx_id ON redeemer (tx_id);");
+
     log.info("Creating function ct_cip68_metadata");
     jdbcTemplate.execute(
         """
