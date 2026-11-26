@@ -220,7 +220,8 @@ public class CardanoDbSyncService {
   }
 
   @TrackExecutionTime
-  @Scheduled(cron = "0 0 0/12 * * *")
+  // every hour, at the half hour so that it does not start together with the Minswap view
+  @Scheduled(cron = "0 30 * * * *")
   public void updateOwnerView() {
     refreshMaterializedView("ct_ma_owners");
   }
@@ -853,56 +854,28 @@ public class CardanoDbSyncService {
   }
 
   /**
-   * Who holds a token right now, read from the unspent outputs: the largest holders first, at most
-   * {@code limit} of them. Outputs of one stake address count as one holder.
+   * Who holds a token, the largest holders first and at most {@code limit} of them, as
+   * ct_ma_owners has it: the view is refreshed every hour, so a token that changed hands since is
+   * still with its previous holder. Reading the unspent outputs instead walks every output the
+   * token was ever in, which takes minutes for a token that is traded a lot.
    *
-   * <p>The query walks every output the token was ever in, which takes minutes for a token that is
-   * traded a lot. It is given a few seconds and cancelled after that. Such a token is answered from
-   * ct_ma_owners instead, which is refreshed twice a day and adds up the tokens of a policy per
-   * holder: that is the token's own quantity only where the policy has no other token, so for
-   * other policies the answer is an empty list.
+   * <p>The view adds up the tokens of a policy per holder. That is the token's own quantity where
+   * the policy has no other token; for other policies the quantity is not known and given as 0,
+   * and the holders come in the order of what they hold of the policy.
    */
   public List<TokenHolder> getTokenHolders(String policyId, String assetName, int limit)
       throws DecoderException {
-    JdbcTemplate limited = new JdbcTemplate(jdbcTemplate.getDataSource());
-    limited.setQueryTimeout(TOKEN_HOLDERS_SECONDS);
-    try {
-      return queryTokenHolders(limited, policyId, assetName, limit);
-    } catch (DataAccessException e) {
-      log.info(
-          "Holders of {}.{} not read live: {}",
-          policyId,
-          assetName,
-          e.getMostSpecificCause().getMessage());
-    }
-    try {
-      return storedTokenHolders(limited, policyId, assetName, limit);
-    } catch (DataAccessException e) {
-      log.info(
-          "Holders of {}.{} not read from ct_ma_owners: {}",
-          policyId,
-          assetName,
-          e.getMostSpecificCause().getMessage());
-      return List.of();
-    }
-  }
-
-  /** The holders as ct_ma_owners has them, empty unless the token is the only one of its policy. */
-  private List<TokenHolder> storedTokenHolders(
-      JdbcTemplate limited, String policyId, String assetName, int limit) throws DecoderException {
     if (!isMaterializedViewPopulated("ct_ma_owners")) {
       return List.of();
     }
     byte[] policy = Hex.decodeHex(policyId);
     Integer tokens =
-        limited.queryForObject(
+        jdbcTemplate.queryForObject(
             "select count(*) from (select 1 from multi_asset where \"policy\"=? limit 2) t",
             Integer.class,
             policy);
-    if (tokens == null || tokens != 1) {
-      return List.of();
-    }
-    return limited.query(
+    boolean onlyToken = tokens != null && tokens == 1;
+    return jdbcTemplate.query(
         """
 					select mo.address, mo.quantity
 					from ct_ma_owners mo
@@ -910,31 +883,10 @@ public class CardanoDbSyncService {
 					order by mo.quantity desc, mo.address
 					limit ?
 					""",
-        (rs, rowNum) -> new TokenHolder(rs.getString("address"), rs.getLong("quantity")),
+        (rs, rowNum) ->
+            new TokenHolder(rs.getString("address"), onlyToken ? rs.getLong("quantity") : 0),
         policy,
         assetName.toLowerCase(),
-        limit);
-  }
-
-  private static final int TOKEN_HOLDERS_SECONDS = 4;
-
-  private List<TokenHolder> queryTokenHolders(
-      JdbcTemplate limited, String policyId, String assetName, int limit) throws DecoderException {
-    return limited.query(
-        """
-					select coalesce(sa."view", txo.address) address, sum(mto.quantity) quantity
-					from multi_asset ma
-					join ma_tx_out mto on mto.ident=ma.id
-					join tx_out txo on txo.id=mto.tx_out_id and txo.consumed_by_tx_id is null
-					left join stake_address sa on sa.id=txo.stake_address_id
-					where ma."policy"=? and ma.name=?
-					group by coalesce(sa."view", txo.address)
-					order by sum(mto.quantity) desc, coalesce(sa."view", txo.address)
-					limit ?
-					""",
-        (rs, rowNum) -> new TokenHolder(rs.getString("address"), rs.getLong("quantity")),
-        Hex.decodeHex(policyId),
-        Hex.decodeHex(assetName),
         limit);
   }
 

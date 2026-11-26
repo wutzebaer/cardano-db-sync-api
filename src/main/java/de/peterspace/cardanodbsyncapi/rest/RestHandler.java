@@ -346,8 +346,9 @@ public class RestHandler {
 
   @Operation(
       summary =
-          "Get who holds a token right now, the largest holders first, 21 at most. Outputs of one"
-              + " stake address count as one holder")
+          "Get who holds a token, the largest holders first, 21 at most, values get updated every"
+              + " hour. Outputs of one stake address count as one holder. The quantity is 0 where"
+              + " the policy has more than one token: it is not known per token then")
   @GetMapping(value = {"/token/{policyId}/{assetName}/holders", "/token/{policyId}//holders"})
   @Cacheable("getTokenHolders")
   public List<TokenHolder> getTokenHolders(
@@ -402,7 +403,7 @@ public class RestHandler {
     return cardanoDbSyncService.getEpochStake(poolHash, epoch);
   }
 
-  @Operation(summary = "Get all token owners of a policyId, values get updated twice a day")
+  @Operation(summary = "Get all token owners of a policyId, values get updated every hour")
   @GetMapping(value = "/policy/{policyId}/owners")
   @Cacheable("getOwners")
   public List<OwnerInfo> getOwners(
