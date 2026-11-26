@@ -11,6 +11,7 @@ import de.peterspace.cardanodbsyncapi.dto.PoolInfo;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpoch;
 import de.peterspace.cardanodbsyncapi.dto.PoolEpochFacts;
 import de.peterspace.cardanodbsyncapi.dto.PoolPerformance;
+import de.peterspace.cardanodbsyncapi.dto.ProtocolParams;
 import de.peterspace.cardanodbsyncapi.dto.SlotBlock;
 import de.peterspace.cardanodbsyncapi.dto.ReturnAddress;
 import de.peterspace.cardanodbsyncapi.dto.ScriptOutput;
@@ -105,6 +106,13 @@ public class RestHandler {
           String namePrefix)
       throws DecoderException {
     return scriptService.getMintedNames(scriptHash, namePrefix);
+  }
+
+  @Operation(summary = "The protocol parameters of the current epoch that a transaction is built with")
+  @GetMapping(value = "/protocolParams")
+  @Cacheable("getProtocolParams")
+  public ProtocolParams getProtocolParams() {
+    return scriptService.getProtocolParams();
   }
 
   @Operation(summary = "The Plutus V3 cost model of the current epoch")

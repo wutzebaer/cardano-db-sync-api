@@ -313,6 +313,14 @@
 		<jsr107:mbeans enable-statistics="true" />
 	</cache>
 
+	<cache alias="getProtocolParams">
+		<expiry>
+			<ttl unit="minutes">10</ttl>
+		</expiry>
+		<heap unit="entries">10</heap>
+		<jsr107:mbeans enable-statistics="true" />
+	</cache>
+
 	<cache alias="getPlutusV3CostModel">
 		<expiry>
 			<ttl unit="minutes">10</ttl>

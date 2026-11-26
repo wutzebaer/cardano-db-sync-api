@@ -2,6 +2,7 @@ package de.peterspace.cardanodbsyncapi.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import de.peterspace.cardanodbsyncapi.dto.ProtocolParams;
 import de.peterspace.cardanodbsyncapi.dto.ScriptOutput;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -133,6 +134,40 @@ public class ScriptService {
         prefix.length,
         prefix,
         MAX_MINTED_NAMES);
+  }
+
+  /**
+   * The protocol parameters of the current epoch. The prices of script runs are fractions on chain
+   * and decimal numbers in the database, which is exact for the values in use (0.0577, 0.0000721).
+   */
+  public ProtocolParams getProtocolParams() {
+    return jdbcTemplate.queryForObject(
+        """
+				select ep.epoch_no, ep.min_fee_a, ep.min_fee_b, ep.key_deposit, ep.pool_deposit,
+					ep.coins_per_utxo_size, ep.max_tx_size, ep.max_val_size, ep.price_mem, ep.price_step,
+					ep.max_tx_ex_mem, ep.max_tx_ex_steps, ep.min_fee_ref_script_cost_per_byte,
+					ep.collateral_percent, ep.max_collateral_inputs
+				from epoch_param ep
+				order by ep.epoch_no desc
+				limit 1
+				""",
+        (rs, rowNum) ->
+            new ProtocolParams(
+                rs.getInt("epoch_no"),
+                rs.getLong("min_fee_a"),
+                rs.getLong("min_fee_b"),
+                rs.getLong("key_deposit"),
+                rs.getLong("pool_deposit"),
+                rs.getLong("coins_per_utxo_size"),
+                rs.getLong("max_tx_size"),
+                rs.getLong("max_val_size"),
+                rs.getDouble("price_mem"),
+                rs.getDouble("price_step"),
+                rs.getLong("max_tx_ex_mem"),
+                rs.getLong("max_tx_ex_steps"),
+                rs.getDouble("min_fee_ref_script_cost_per_byte"),
+                rs.getInt("collateral_percent"),
+                rs.getInt("max_collateral_inputs")));
   }
 
   /** The Plutus V3 cost model of the current epoch, which a transaction that runs a script commits to. */
