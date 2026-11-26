@@ -857,8 +857,10 @@ public class CardanoDbSyncService {
    * {@code limit} of them. Outputs of one stake address count as one holder.
    *
    * <p>The query walks every output the token was ever in, which takes minutes for a token that is
-   * traded a lot. It is given a few seconds and cancelled after that: such a token answers with an
-   * empty list instead of keeping the database busy.
+   * traded a lot. It is given a few seconds and cancelled after that. Such a token is answered from
+   * ct_ma_owners instead, which is refreshed twice a day and adds up the tokens of a policy per
+   * holder: that is the token's own quantity only where the policy has no other token, so for
+   * other policies the answer is an empty list.
    */
   public List<TokenHolder> getTokenHolders(String policyId, String assetName, int limit)
       throws DecoderException {
@@ -867,9 +869,51 @@ public class CardanoDbSyncService {
     try {
       return queryTokenHolders(limited, policyId, assetName, limit);
     } catch (DataAccessException e) {
-      log.info("Holders of {}.{} not read: {}", policyId, assetName, e.getMostSpecificCause().getMessage());
+      log.info(
+          "Holders of {}.{} not read live: {}",
+          policyId,
+          assetName,
+          e.getMostSpecificCause().getMessage());
+    }
+    try {
+      return storedTokenHolders(limited, policyId, assetName, limit);
+    } catch (DataAccessException e) {
+      log.info(
+          "Holders of {}.{} not read from ct_ma_owners: {}",
+          policyId,
+          assetName,
+          e.getMostSpecificCause().getMessage());
       return List.of();
     }
+  }
+
+  /** The holders as ct_ma_owners has them, empty unless the token is the only one of its policy. */
+  private List<TokenHolder> storedTokenHolders(
+      JdbcTemplate limited, String policyId, String assetName, int limit) throws DecoderException {
+    if (!isMaterializedViewPopulated("ct_ma_owners")) {
+      return List.of();
+    }
+    byte[] policy = Hex.decodeHex(policyId);
+    Integer tokens =
+        limited.queryForObject(
+            "select count(*) from (select 1 from multi_asset where \"policy\"=? limit 2) t",
+            Integer.class,
+            policy);
+    if (tokens == null || tokens != 1) {
+      return List.of();
+    }
+    return limited.query(
+        """
+					select mo.address, mo.quantity
+					from ct_ma_owners mo
+					where mo."policy"=? and ? = any(mo.maNames)
+					order by mo.quantity desc, mo.address
+					limit ?
+					""",
+        (rs, rowNum) -> new TokenHolder(rs.getString("address"), rs.getLong("quantity")),
+        policy,
+        assetName.toLowerCase(),
+        limit);
   }
 
   private static final int TOKEN_HOLDERS_SECONDS = 4;
